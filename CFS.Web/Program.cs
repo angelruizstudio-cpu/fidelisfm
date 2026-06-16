@@ -39,6 +39,7 @@ builder.Services.AddHttpClient<IAiAdvisorService, OpenAiAdvisorService>();
 var demoEnabled = builder.Configuration.GetValue("Demo:Enabled", false);
 if (demoEnabled)
 {
+    builder.Services.AddScoped<IAiUsageLimiter, DemoAiUsageLimiter>();
     builder.Services.AddScoped<IDashboardRepository, DemoDashboardRepository>();
     builder.Services.AddScoped<IUserAuthenticationRepository, DemoUserAuthenticationRepository>();
     builder.Services.AddScoped<IIncomeRepository, DemoIncomeRepository>();
@@ -53,6 +54,7 @@ else
 {
     builder.Services.AddScoped(_ =>
         new SqlConnectionFactory(builder.Configuration.GetConnectionString("CfsDatabase") ?? string.Empty));
+    builder.Services.AddScoped<IAiUsageLimiter, SqlAiUsageLimiter>();
     builder.Services.AddScoped<IDashboardRepository, SqlDashboardRepository>();
     builder.Services.AddScoped<IUserAuthenticationRepository, SqlUserAuthenticationRepository>();
     builder.Services.AddScoped<IIncomeRepository, SqlIncomeRepository>();
