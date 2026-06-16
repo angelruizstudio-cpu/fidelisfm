@@ -5,8 +5,10 @@ using Microsoft.Data.SqlClient;
 
 namespace CFS.Data;
 
-public sealed class SqlIncomeRepository(SqlConnectionFactory connectionFactory) : IIncomeRepository
+public sealed class SqlIncomeRepository(SqlConnectionFactory connectionFactory, ITenantContext tenantContext) : IIncomeRepository
 {
+    private readonly int _tenantId = tenantContext.TenantId;
+
     private static readonly string[] DefaultPaymentMethods =
     [
         "Efectivo",
@@ -24,7 +26,8 @@ public sealed class SqlIncomeRepository(SqlConnectionFactory connectionFactory) 
 
         var accounts = await LoadOptionsAsync(
             connection,
-            "SELECT ID_Cuenta, NombreCuenta FROM dbo.CuentasBancarias ORDER BY NombreCuenta;",
+            "SELECT ID_Cuenta, NombreCuenta FROM dbo.CuentasBancarias WHERE ID_Tenant_FK = @tenantId ORDER BY NombreCuenta;",
+            _tenantId,
             cancellationToken);
 
         var subcategories = await LoadOptionsAsync(
@@ -34,8 +37,10 @@ public sealed class SqlIncomeRepository(SqlConnectionFactory connectionFactory) 
             FROM dbo.Subcategorias S
             INNER JOIN dbo.Categorias C ON C.ID_Categoria = S.ID_Categoria_FK
             WHERE C.TipoCategoria = 'Ingreso'
+              AND S.ID_Tenant_FK = @tenantId
             ORDER BY S.NombreSubcategoria;
             """,
+            _tenantId,
             cancellationToken);
 
         var members = await LoadOptionsAsync(
@@ -44,11 +49,13 @@ public sealed class SqlIncomeRepository(SqlConnectionFactory connectionFactory) 
             SELECT ID_Miembro,
                    LTRIM(RTRIM(Nombre)) + CASE WHEN LTRIM(RTRIM(Apellido)) <> '' THEN ' ' + LTRIM(RTRIM(Apellido)) ELSE '' END
             FROM dbo.Miembros
+            WHERE ID_Tenant_FK = @tenantId
             ORDER BY LTRIM(RTRIM(Nombre)), LTRIM(RTRIM(Apellido));
             """,
+            _tenantId,
             cancellationToken);
 
-        var paymentMethods = await LoadPaymentMethodsAsync(connection, cancellationToken);
+        var paymentMethods = await LoadPaymentMethodsAsync(connection, _tenantId, cancellationToken);
         return new IncomeLookups(accounts, subcategories, members, paymentMethods);
     }
 
@@ -88,12 +95,14 @@ public sealed class SqlIncomeRepository(SqlConnectionFactory connectionFactory) 
             INNER JOIN dbo.CuentasBancarias Cta ON Cta.ID_Cuenta = T.ID_Cuenta_FK
             LEFT JOIN dbo.Miembros M ON M.ID_Miembro = T.ID_Miembro_FK
             WHERE C.TipoCategoria = 'Ingreso'
+              AND T.ID_Tenant_FK = @tenantId
               AND T.Fecha >= @start
               AND T.Fecha < @end
             ORDER BY T.Fecha DESC, T.ID_Transaccion DESC;
             """;
 
         await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@tenantId", _tenantId);
         command.Parameters.Add("@start", SqlDbType.Date).Value = start;
         command.Parameters.Add("@end", SqlDbType.Date).Value = end;
 
@@ -130,11 +139,13 @@ public sealed class SqlIncomeRepository(SqlConnectionFactory connectionFactory) 
             INNER JOIN dbo.CuentasBancarias Cta ON Cta.ID_Cuenta = T.ID_Cuenta_FK
             LEFT JOIN dbo.Miembros M ON M.ID_Miembro = T.ID_Miembro_FK
             WHERE T.ID_Transaccion = @id
+              AND T.ID_Tenant_FK = @tenantId
               AND C.TipoCategoria = 'Ingreso';
             """;
 
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.Add("@id", SqlDbType.Int).Value = id;
+        command.Parameters.AddWithValue("@tenantId", _tenantId);
         var rows = await ReadIncomeTransactionsAsync(command, cancellationToken);
         return rows.FirstOrDefault();
     }
@@ -157,7 +168,7 @@ public sealed class SqlIncomeRepository(SqlConnectionFactory connectionFactory) 
 
         try
         {
-            var subcategoryName = await GetSubcategoryNameAsync(connection, transaction, entry.SubcategoryId, cancellationToken);
+            var subcategoryName = await GetSubcategoryNameAsync(connection, transaction, entry.SubcategoryId, _tenantId, cancellationToken);
             if (subcategoryName is null)
             {
                 await transaction.RollbackAsync(cancellationToken);
@@ -171,25 +182,25 @@ public sealed class SqlIncomeRepository(SqlConnectionFactory connectionFactory) 
             }
 
             if (entry.Id <= 0 && !ignorePossibleDuplicate &&
-                await HasPossibleDuplicateAsync(connection, transaction, entry, cancellationToken))
+                await HasPossibleDuplicateAsync(connection, transaction, entry, _tenantId, cancellationToken))
             {
                 await transaction.RollbackAsync(cancellationToken);
                 return new IncomeSaveResult(false, null, true, "Posible duplicado detectado.");
             }
 
-            if (await HasDuplicateCheckAsync(connection, transaction, entry, cancellationToken))
+            if (await HasDuplicateCheckAsync(connection, transaction, entry, _tenantId, cancellationToken))
             {
                 await transaction.RollbackAsync(cancellationToken);
                 return new IncomeSaveResult(false, null, false, "Ya existe una transacción activa con ese número de cheque.");
             }
 
             var accountId = entry.Id <= 0
-                ? await ResolveAccountIdAsync(connection, transaction, subcategoryName, entry.AccountId, cancellationToken)
+                ? await ResolveAccountIdAsync(connection, transaction, subcategoryName, entry.AccountId, _tenantId, cancellationToken)
                 : entry.AccountId;
 
             var savedId = entry.Id <= 0
-                ? await InsertIncomeAsync(connection, transaction, entry, accountId, subcategoryName, userName, cancellationToken)
-                : await UpdateIncomeAsync(connection, transaction, entry, accountId, userName, cancellationToken);
+                ? await InsertIncomeAsync(connection, transaction, entry, accountId, subcategoryName, userName, _tenantId, cancellationToken)
+                : await UpdateIncomeAsync(connection, transaction, entry, accountId, userName, _tenantId, cancellationToken);
 
             await transaction.CommitAsync(cancellationToken);
             return new IncomeSaveResult(true, savedId, false, null);
@@ -231,7 +242,8 @@ public sealed class SqlIncomeRepository(SqlConnectionFactory connectionFactory) 
                        ISNULL(Conciliada, 0) AS Conciliada,
                        CASE WHEN ID_Deposito_FK IS NULL THEN 0 ELSE 1 END AS Depositada
                 FROM dbo.Transacciones
-                WHERE ID_Transaccion = @id;
+                WHERE ID_Transaccion = @id
+                  AND ID_Tenant_FK = @tenantId;
                 """;
 
             decimal amount;
@@ -244,6 +256,7 @@ public sealed class SqlIncomeRepository(SqlConnectionFactory connectionFactory) 
             await using (var command = new SqlCommand(getSql, connection, transaction))
             {
                 command.Parameters.Add("@id", SqlDbType.Int).Value = id;
+                command.Parameters.AddWithValue("@tenantId", _tenantId);
                 await using var reader = await command.ExecuteReaderAsync(cancellationToken);
                 if (!await reader.ReadAsync(cancellationToken))
                 {
@@ -288,7 +301,8 @@ public sealed class SqlIncomeRepository(SqlConnectionFactory connectionFactory) 
                     FechaAnulacion = GETDATE(),
                     UsuarioAnulacion = @user,
                     MotivoAnulacion = @reason
-                WHERE ID_Transaccion = @id;
+                WHERE ID_Transaccion = @id
+                  AND ID_Tenant_FK = @tenantId;
                 """;
 
             await using (var command = new SqlCommand(updateSql, connection, transaction))
@@ -296,6 +310,7 @@ public sealed class SqlIncomeRepository(SqlConnectionFactory connectionFactory) 
                 command.Parameters.Add("@user", SqlDbType.NVarChar, 100).Value = userName;
                 command.Parameters.Add("@reason", SqlDbType.NVarChar, 255).Value = reason.Trim();
                 command.Parameters.Add("@id", SqlDbType.Int).Value = id;
+                command.Parameters.AddWithValue("@tenantId", _tenantId);
                 await command.ExecuteNonQueryAsync(cancellationToken);
             }
 
@@ -328,13 +343,15 @@ public sealed class SqlIncomeRepository(SqlConnectionFactory connectionFactory) 
             SELECT TOP 1 ID_Miembro
             FROM dbo.Miembros
             WHERE UPPER(LTRIM(RTRIM(Nombre))) = UPPER(@firstName)
-              AND UPPER(LTRIM(RTRIM(Apellido))) = UPPER(@lastName);
+              AND UPPER(LTRIM(RTRIM(Apellido))) = UPPER(@lastName)
+              AND ID_Tenant_FK = @tenantId;
             """;
 
         await using (var findCommand = new SqlCommand(findSql, connection))
         {
             findCommand.Parameters.Add("@firstName", SqlDbType.NVarChar, 100).Value = firstName;
             findCommand.Parameters.Add("@lastName", SqlDbType.NVarChar, 100).Value = lastName;
+            findCommand.Parameters.AddWithValue("@tenantId", _tenantId);
             var existingId = await findCommand.ExecuteScalarAsync(cancellationToken);
             if (existingId is not null and not DBNull)
             {
@@ -343,8 +360,8 @@ public sealed class SqlIncomeRepository(SqlConnectionFactory connectionFactory) 
         }
 
         const string insertSql = """
-            INSERT INTO dbo.Miembros (Nombre, Apellido)
-            VALUES (@firstName, @lastName);
+            INSERT INTO dbo.Miembros (Nombre, Apellido, ID_Tenant_FK)
+            VALUES (@firstName, @lastName, @tenantId);
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
 
@@ -353,6 +370,7 @@ public sealed class SqlIncomeRepository(SqlConnectionFactory connectionFactory) 
             await using var insertCommand = new SqlCommand(insertSql, connection);
             insertCommand.Parameters.Add("@firstName", SqlDbType.NVarChar, 100).Value = firstName;
             insertCommand.Parameters.Add("@lastName", SqlDbType.NVarChar, 100).Value = lastName;
+            insertCommand.Parameters.AddWithValue("@tenantId", _tenantId);
             var memberId = Convert.ToInt32(await insertCommand.ExecuteScalarAsync(cancellationToken));
             return new MemberSaveResult(true, memberId, BuildMemberDisplayName(firstName, lastName), null);
         }
@@ -378,10 +396,12 @@ public sealed class SqlIncomeRepository(SqlConnectionFactory connectionFactory) 
     private static async Task<IReadOnlyList<LookupOption>> LoadOptionsAsync(
         SqlConnection connection,
         string sql,
+        int tenantId,
         CancellationToken cancellationToken)
     {
         var options = new List<LookupOption>();
         await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@tenantId", tenantId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
@@ -396,6 +416,7 @@ public sealed class SqlIncomeRepository(SqlConnectionFactory connectionFactory) 
 
     private static async Task<IReadOnlyList<string>> LoadPaymentMethodsAsync(
         SqlConnection connection,
+        int tenantId,
         CancellationToken cancellationToken)
     {
         var methods = new SortedSet<string>(DefaultPaymentMethods, StringComparer.OrdinalIgnoreCase);
@@ -405,10 +426,12 @@ public sealed class SqlIncomeRepository(SqlConnectionFactory connectionFactory) 
             FROM dbo.Transacciones
             WHERE MetodoPago IS NOT NULL
               AND LTRIM(RTRIM(MetodoPago)) <> ''
+              AND ID_Tenant_FK = @tenantId
             ORDER BY MetodoPago;
             """,
             connection);
 
+        command.Parameters.AddWithValue("@tenantId", tenantId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
@@ -451,6 +474,7 @@ public sealed class SqlIncomeRepository(SqlConnectionFactory connectionFactory) 
         SqlConnection connection,
         SqlTransaction transaction,
         int subcategoryId,
+        int tenantId,
         CancellationToken cancellationToken)
     {
         const string sql = """
@@ -458,11 +482,13 @@ public sealed class SqlIncomeRepository(SqlConnectionFactory connectionFactory) 
             FROM dbo.Subcategorias S
             INNER JOIN dbo.Categorias C ON C.ID_Categoria = S.ID_Categoria_FK
             WHERE S.ID_Subcategoria = @id
+              AND S.ID_Tenant_FK = @tenantId
               AND C.TipoCategoria = 'Ingreso';
             """;
 
         await using var command = new SqlCommand(sql, connection, transaction);
         command.Parameters.Add("@id", SqlDbType.Int).Value = subcategoryId;
+        command.Parameters.AddWithValue("@tenantId", tenantId);
         return await command.ExecuteScalarAsync(cancellationToken) as string;
     }
 
@@ -470,6 +496,7 @@ public sealed class SqlIncomeRepository(SqlConnectionFactory connectionFactory) 
         SqlConnection connection,
         SqlTransaction transaction,
         IncomeEntry entry,
+        int tenantId,
         CancellationToken cancellationToken)
     {
         const string sql = """
@@ -479,7 +506,8 @@ public sealed class SqlIncomeRepository(SqlConnectionFactory connectionFactory) 
               AND Monto = @amount
               AND ID_Subcategoria_FK = @subcategoryId
               AND ISNULL(Anulada, 0) = 0
-              AND ISNULL(ID_Miembro_FK, 0) = @memberId;
+              AND ISNULL(ID_Miembro_FK, 0) = @memberId
+              AND ID_Tenant_FK = @tenantId;
             """;
 
         await using var command = new SqlCommand(sql, connection, transaction);
@@ -487,6 +515,7 @@ public sealed class SqlIncomeRepository(SqlConnectionFactory connectionFactory) 
         command.Parameters.Add("@amount", SqlDbType.Money).Value = entry.Amount;
         command.Parameters.Add("@subcategoryId", SqlDbType.Int).Value = entry.SubcategoryId;
         command.Parameters.Add("@memberId", SqlDbType.Int).Value = entry.MemberId ?? 0;
+        command.Parameters.AddWithValue("@tenantId", tenantId);
         return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) > 0;
     }
 
@@ -494,6 +523,7 @@ public sealed class SqlIncomeRepository(SqlConnectionFactory connectionFactory) 
         SqlConnection connection,
         SqlTransaction transaction,
         IncomeEntry entry,
+        int tenantId,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(entry.CheckNumber) ||
@@ -507,12 +537,14 @@ public sealed class SqlIncomeRepository(SqlConnectionFactory connectionFactory) 
             FROM dbo.Transacciones
             WHERE NumeroCheque = @checkNumber
               AND ISNULL(Anulada, 0) = 0
+              AND ID_Tenant_FK = @tenantId
               AND (@currentId <= 0 OR ID_Transaccion <> @currentId);
             """;
 
         await using var command = new SqlCommand(sql, connection, transaction);
         command.Parameters.Add("@checkNumber", SqlDbType.VarChar, 50).Value = entry.CheckNumber.Trim();
         command.Parameters.Add("@currentId", SqlDbType.Int).Value = entry.Id;
+        command.Parameters.AddWithValue("@tenantId", tenantId);
         return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) > 0;
     }
 
@@ -523,18 +555,20 @@ public sealed class SqlIncomeRepository(SqlConnectionFactory connectionFactory) 
         int accountId,
         string subcategoryName,
         string userName,
+        int tenantId,
         CancellationToken cancellationToken)
     {
         const string sql = """
             INSERT INTO dbo.Transacciones
-                (Fecha, Descripcion, Monto, ID_Cuenta_FK, ID_Subcategoria_FK, ID_Miembro_FK, MetodoPago, NumeroCheque)
+                (Fecha, Descripcion, Monto, ID_Cuenta_FK, ID_Subcategoria_FK, ID_Miembro_FK, MetodoPago, NumeroCheque, ID_Tenant_FK)
             VALUES
-                (@date, @description, @amount, @accountId, @subcategoryId, @memberId, @paymentMethod, @checkNumber);
+                (@date, @description, @amount, @accountId, @subcategoryId, @memberId, @paymentMethod, @checkNumber, @tenantId);
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
 
         await using var command = new SqlCommand(sql, connection, transaction);
         AddEntryParameters(command, entry, accountId);
+        command.Parameters.AddWithValue("@tenantId", tenantId);
         var id = Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken));
 
         if (ImpactsBankImmediately(entry.PaymentMethod))
@@ -560,6 +594,7 @@ public sealed class SqlIncomeRepository(SqlConnectionFactory connectionFactory) 
         IncomeEntry entry,
         int accountId,
         string userName,
+        int tenantId,
         CancellationToken cancellationToken)
     {
         const string getSql = """
@@ -570,7 +605,8 @@ public sealed class SqlIncomeRepository(SqlConnectionFactory connectionFactory) 
                    CASE WHEN ID_Deposito_FK IS NULL THEN 0 ELSE 1 END AS Depositada,
                    ISNULL(Anulada, 0) AS Anulada
             FROM dbo.Transacciones
-            WHERE ID_Transaccion = @id;
+            WHERE ID_Transaccion = @id
+              AND ID_Tenant_FK = @tenantId;
             """;
 
         decimal oldAmount;
@@ -583,6 +619,7 @@ public sealed class SqlIncomeRepository(SqlConnectionFactory connectionFactory) 
         await using (var command = new SqlCommand(getSql, connection, transaction))
         {
             command.Parameters.Add("@id", SqlDbType.Int).Value = entry.Id;
+            command.Parameters.AddWithValue("@tenantId", tenantId);
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             if (!await reader.ReadAsync(cancellationToken))
             {
@@ -611,13 +648,15 @@ public sealed class SqlIncomeRepository(SqlConnectionFactory connectionFactory) 
                 ID_Miembro_FK = @memberId,
                 MetodoPago = @paymentMethod,
                 NumeroCheque = @checkNumber
-            WHERE ID_Transaccion = @id;
+            WHERE ID_Transaccion = @id
+              AND ID_Tenant_FK = @tenantId;
             """;
 
         await using (var command = new SqlCommand(updateSql, connection, transaction))
         {
             AddEntryParameters(command, entry, accountId);
             command.Parameters.Add("@id", SqlDbType.Int).Value = entry.Id;
+            command.Parameters.AddWithValue("@tenantId", tenantId);
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
 
@@ -662,6 +701,7 @@ public sealed class SqlIncomeRepository(SqlConnectionFactory connectionFactory) 
         SqlTransaction transaction,
         string subcategoryName,
         int fallbackAccountId,
+        int tenantId,
         CancellationToken cancellationToken)
     {
         var accountKey = DetectAccountBySubcategory(subcategoryName);
@@ -671,10 +711,11 @@ public sealed class SqlIncomeRepository(SqlConnectionFactory connectionFactory) 
         }
 
         await using var command = new SqlCommand(
-            "SELECT TOP 1 ID_Cuenta FROM dbo.CuentasBancarias WHERE NombreCuenta LIKE @name ORDER BY ID_Cuenta;",
+            "SELECT TOP 1 ID_Cuenta FROM dbo.CuentasBancarias WHERE NombreCuenta LIKE @name AND ID_Tenant_FK = @tenantId ORDER BY ID_Cuenta;",
             connection,
             transaction);
         command.Parameters.Add("@name", SqlDbType.VarChar, 100).Value = $"%{accountKey}%";
+        command.Parameters.AddWithValue("@tenantId", tenantId);
         var value = await command.ExecuteScalarAsync(cancellationToken);
         return value is null or DBNull ? fallbackAccountId : Convert.ToInt32(value);
     }

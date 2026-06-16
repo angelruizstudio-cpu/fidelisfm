@@ -5,8 +5,10 @@ using Microsoft.Data.SqlClient;
 
 namespace CFS.Data;
 
-public sealed class SqlDepositRepository(SqlConnectionFactory connectionFactory) : IDepositRepository
+public sealed class SqlDepositRepository(SqlConnectionFactory connectionFactory, ITenantContext tenantContext) : IDepositRepository
 {
+    private readonly int _tenantId = tenantContext.TenantId;
+
     public async Task<DepositLookups> GetLookupsAsync(CancellationToken cancellationToken = default)
     {
         await using var connection = connectionFactory.Create();
@@ -14,8 +16,9 @@ public sealed class SqlDepositRepository(SqlConnectionFactory connectionFactory)
 
         var accounts = new List<LookupOption>();
         await using var command = new SqlCommand(
-            "SELECT ID_Cuenta, NombreCuenta FROM dbo.CuentasBancarias ORDER BY NombreCuenta;",
+            "SELECT ID_Cuenta, NombreCuenta FROM dbo.CuentasBancarias WHERE ID_Tenant_FK = @tenantId ORDER BY NombreCuenta;",
             connection);
+        command.Parameters.AddWithValue("@tenantId", _tenantId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
@@ -50,6 +53,7 @@ public sealed class SqlDepositRepository(SqlConnectionFactory connectionFactory)
             INNER JOIN dbo.CuentasBancarias Cta ON Cta.ID_Cuenta = T.ID_Cuenta_FK
             LEFT JOIN dbo.Miembros M ON M.ID_Miembro = T.ID_Miembro_FK
             WHERE C.TipoCategoria = 'Ingreso'
+              AND T.ID_Tenant_FK = @tenantId
               AND ISNULL(T.Anulada, 0) = 0
               AND ISNULL(T.Conciliada, 0) = 0
               AND T.ID_Deposito_FK IS NULL
@@ -59,6 +63,7 @@ public sealed class SqlDepositRepository(SqlConnectionFactory connectionFactory)
 
         var rows = new List<DepositCandidate>();
         await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@tenantId", _tenantId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
@@ -99,6 +104,7 @@ public sealed class SqlDepositRepository(SqlConnectionFactory connectionFactory)
             FROM dbo.Depositos D
             INNER JOIN dbo.CuentasBancarias C ON C.ID_Cuenta = D.ID_Cuenta_FK
             LEFT JOIN dbo.Transacciones T ON T.ID_Deposito_FK = D.ID_Deposito
+            WHERE D.ID_Tenant_FK = @tenantId
             GROUP BY D.ID_Deposito, D.FechaDeposito, D.ID_Cuenta_FK, C.NombreCuenta,
                      D.MontoTotal, D.Anulado, D.Conciliado, D.UsuarioAnulacion
             ORDER BY D.FechaDeposito DESC, D.ID_Deposito DESC;
@@ -106,6 +112,7 @@ public sealed class SqlDepositRepository(SqlConnectionFactory connectionFactory)
 
         var rows = new List<DepositSummary>();
         await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@tenantId", _tenantId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
@@ -136,7 +143,7 @@ public sealed class SqlDepositRepository(SqlConnectionFactory connectionFactory)
 
         try
         {
-            var result = await CreateWithinTransactionAsync(connection, transaction, entry, cancellationToken);
+            var result = await CreateWithinTransactionAsync(connection, transaction, entry, _tenantId, cancellationToken);
             if (!result.Saved)
             {
                 await transaction.RollbackAsync(cancellationToken);
@@ -172,7 +179,7 @@ public sealed class SqlDepositRepository(SqlConnectionFactory connectionFactory)
             var depositIds = new List<int>();
             foreach (var entry in entries)
             {
-                var result = await CreateWithinTransactionAsync(connection, transaction, entry, cancellationToken);
+                var result = await CreateWithinTransactionAsync(connection, transaction, entry, _tenantId, cancellationToken);
                 if (!result.Saved || !result.DepositId.HasValue)
                 {
                     await transaction.RollbackAsync(cancellationToken);
@@ -220,7 +227,8 @@ public sealed class SqlDepositRepository(SqlConnectionFactory connectionFactory)
                        ISNULL(Conciliado, 0) AS Conciliado,
                        ISNULL(Anulado, 0) AS Anulado
                 FROM dbo.Depositos
-                WHERE ID_Deposito = @id;
+                WHERE ID_Deposito = @id
+                  AND ID_Tenant_FK = @tenantId;
                 """;
 
             int accountId;
@@ -231,6 +239,7 @@ public sealed class SqlDepositRepository(SqlConnectionFactory connectionFactory)
             await using (var command = new SqlCommand(getSql, connection, transaction))
             {
                 command.Parameters.Add("@id", SqlDbType.Int).Value = id;
+                command.Parameters.AddWithValue("@tenantId", _tenantId);
                 await using var reader = await command.ExecuteReaderAsync(cancellationToken);
                 if (!await reader.ReadAsync(cancellationToken))
                 {
@@ -263,6 +272,7 @@ public sealed class SqlDepositRepository(SqlConnectionFactory connectionFactory)
                     UsuarioAnulacion = @user,
                     MotivoAnulacion = @reason
                 WHERE ID_Deposito = @id
+                  AND ID_Tenant_FK = @tenantId
                   AND ISNULL(Anulado, 0) = 0
                   AND ISNULL(Conciliado, 0) = 0;
                 """;
@@ -272,6 +282,7 @@ public sealed class SqlDepositRepository(SqlConnectionFactory connectionFactory)
                 command.Parameters.Add("@id", SqlDbType.Int).Value = id;
                 command.Parameters.Add("@user", SqlDbType.NVarChar, 100).Value = userName;
                 command.Parameters.Add("@reason", SqlDbType.NVarChar, 255).Value = reason.Trim();
+                command.Parameters.AddWithValue("@tenantId", _tenantId);
                 var affected = await command.ExecuteNonQueryAsync(cancellationToken);
                 if (affected == 0)
                 {
@@ -281,11 +292,12 @@ public sealed class SqlDepositRepository(SqlConnectionFactory connectionFactory)
             }
 
             await using (var command = new SqlCommand(
-                "UPDATE dbo.Transacciones SET ID_Deposito_FK = NULL WHERE ID_Deposito_FK = @id;",
+                "UPDATE dbo.Transacciones SET ID_Deposito_FK = NULL WHERE ID_Deposito_FK = @id AND ID_Tenant_FK = @tenantId;",
                 connection,
                 transaction))
             {
                 command.Parameters.Add("@id", SqlDbType.Int).Value = id;
+                command.Parameters.AddWithValue("@tenantId", _tenantId);
                 await command.ExecuteNonQueryAsync(cancellationToken);
             }
 
@@ -313,6 +325,7 @@ public sealed class SqlDepositRepository(SqlConnectionFactory connectionFactory)
         SqlConnection connection,
         SqlTransaction transaction,
         IReadOnlyCollection<int> ids,
+        int tenantId,
         CancellationToken cancellationToken)
     {
         var rows = new List<DepositCandidate>();
@@ -336,6 +349,7 @@ public sealed class SqlDepositRepository(SqlConnectionFactory connectionFactory)
             INNER JOIN dbo.CuentasBancarias Cta ON Cta.ID_Cuenta = T.ID_Cuenta_FK
             LEFT JOIN dbo.Miembros M ON M.ID_Miembro = T.ID_Miembro_FK
             WHERE T.ID_Transaccion IN ({string.Join(", ", parameterNames)})
+              AND T.ID_Tenant_FK = @tenantId
               AND C.TipoCategoria = 'Ingreso'
               AND ISNULL(T.Anulada, 0) = 0
               AND ISNULL(T.Conciliada, 0) = 0
@@ -344,6 +358,7 @@ public sealed class SqlDepositRepository(SqlConnectionFactory connectionFactory)
             """;
 
         await using var command = new SqlCommand(sql, connection, transaction);
+        command.Parameters.AddWithValue("@tenantId", tenantId);
         var index = 0;
         foreach (var id in ids)
         {
@@ -373,12 +388,13 @@ public sealed class SqlDepositRepository(SqlConnectionFactory connectionFactory)
         SqlConnection connection,
         SqlTransaction transaction,
         DepositEntry entry,
+        int tenantId,
         CancellationToken cancellationToken)
     {
         if (entry.AccountId <= 0) return new DepositSaveResult(false, null, "Selecciona una cuenta bancaria.");
         if (entry.TransactionIds.Count == 0) return new DepositSaveResult(false, null, "Selecciona al menos un ingreso pendiente.");
 
-        var selected = await LoadSelectedAsync(connection, transaction, entry.TransactionIds, cancellationToken);
+        var selected = await LoadSelectedAsync(connection, transaction, entry.TransactionIds, tenantId, cancellationToken);
         if (selected.Count != entry.TransactionIds.Distinct().Count())
         {
             return new DepositSaveResult(false, null, "Uno o mas ingresos seleccionados ya no estan disponibles.");
@@ -397,9 +413,9 @@ public sealed class SqlDepositRepository(SqlConnectionFactory connectionFactory)
 
         const string insertDepositSql = """
             INSERT INTO dbo.Depositos
-                (ID_Cuenta_FK, FechaDeposito, MontoTotal, Conciliado, Anulado)
+                (ID_Cuenta_FK, FechaDeposito, MontoTotal, Conciliado, Anulado, ID_Tenant_FK)
             VALUES
-                (@accountId, @date, @actual, 0, 0);
+                (@accountId, @date, @actual, 0, 0, @tenantId);
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
 
@@ -409,17 +425,19 @@ public sealed class SqlDepositRepository(SqlConnectionFactory connectionFactory)
             command.Parameters.Add("@date", SqlDbType.Date).Value = entry.DepositDate.Date;
             command.Parameters.Add("@accountId", SqlDbType.Int).Value = entry.AccountId;
             command.Parameters.Add("@actual", SqlDbType.Money).Value = entry.ActualTotal;
+            command.Parameters.AddWithValue("@tenantId", tenantId);
             depositId = Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken));
         }
 
         foreach (var item in selected)
         {
             await using var command = new SqlCommand(
-                "UPDATE dbo.Transacciones SET ID_Deposito_FK = @depositId WHERE ID_Transaccion = @transactionId AND ID_Deposito_FK IS NULL;",
+                "UPDATE dbo.Transacciones SET ID_Deposito_FK = @depositId WHERE ID_Transaccion = @transactionId AND ID_Deposito_FK IS NULL AND ID_Tenant_FK = @tenantId;",
                 connection,
                 transaction);
             command.Parameters.Add("@depositId", SqlDbType.Int).Value = depositId;
             command.Parameters.Add("@transactionId", SqlDbType.Int).Value = item.TransactionId;
+            command.Parameters.AddWithValue("@tenantId", tenantId);
             var affected = await command.ExecuteNonQueryAsync(cancellationToken);
             if (affected == 0)
             {

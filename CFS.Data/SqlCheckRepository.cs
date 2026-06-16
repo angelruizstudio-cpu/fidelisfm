@@ -5,8 +5,10 @@ using Microsoft.Data.SqlClient;
 
 namespace CFS.Data;
 
-public sealed class SqlCheckRepository(SqlConnectionFactory connectionFactory) : ICheckRepository
+public sealed class SqlCheckRepository(SqlConnectionFactory connectionFactory, ITenantContext tenantContext) : ICheckRepository
 {
+    private readonly int _tenantId = tenantContext.TenantId;
+
     public async Task<CheckLookups> GetLookupsAsync(CancellationToken cancellationToken = default)
     {
         await using var connection = connectionFactory.Create();
@@ -14,13 +16,16 @@ public sealed class SqlCheckRepository(SqlConnectionFactory connectionFactory) :
 
         var accounts = new List<LookupOption>();
         await using (var command = new SqlCommand(
-            "SELECT ID_Cuenta, NombreCuenta FROM dbo.CuentasBancarias ORDER BY NombreCuenta;",
+            "SELECT ID_Cuenta, NombreCuenta FROM dbo.CuentasBancarias WHERE ID_Tenant_FK = @tenantId ORDER BY NombreCuenta;",
             connection))
-        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
         {
-            while (await reader.ReadAsync(cancellationToken))
+            command.Parameters.AddWithValue("@tenantId", _tenantId);
+            await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
             {
-                accounts.Add(new LookupOption(reader.GetInt32(0), reader.GetString(1)));
+                while (await reader.ReadAsync(cancellationToken))
+                {
+                    accounts.Add(new LookupOption(reader.GetInt32(0), reader.GetString(1)));
+                }
             }
         }
 
@@ -41,30 +46,35 @@ public sealed class SqlCheckRepository(SqlConnectionFactory connectionFactory) :
             INNER JOIN dbo.Categorias C ON C.ID_Categoria = S.ID_Categoria_FK
             WHERE C.TipoCategoria = 'Egreso'
               AND T.MetodoPago = 'Cheque'
+              AND T.ID_Tenant_FK = @tenantId
               AND ISNULL(T.Anulada, 0) = 0
               AND NOT EXISTS (
                   SELECT 1
                   FROM dbo.CFS_Cheques Ch
                   WHERE Ch.EgresoId = T.ID_Transaccion
                     AND Ch.Estado <> 'Anulado'
+                    AND Ch.ID_Tenant_FK = @tenantId
               )
             ORDER BY T.Fecha DESC, T.ID_Transaccion DESC;
             """;
 
         await using (var command = new SqlCommand(expensesSql, connection))
-        await using (var expenseReader = await command.ExecuteReaderAsync(cancellationToken))
         {
-            while (await expenseReader.ReadAsync(cancellationToken))
+            command.Parameters.AddWithValue("@tenantId", _tenantId);
+            await using (var expenseReader = await command.ExecuteReaderAsync(cancellationToken))
             {
-                pendingExpenses.Add(new CheckExpenseOption(
-                    expenseReader.GetInt32(expenseReader.GetOrdinal("ID_Transaccion")),
-                    expenseReader.GetDateTime(expenseReader.GetOrdinal("Fecha")),
-                    expenseReader.GetString(expenseReader.GetOrdinal("Descripcion")),
-                    expenseReader.GetDecimal(expenseReader.GetOrdinal("Monto")),
-                    expenseReader.GetInt32(expenseReader.GetOrdinal("ID_Cuenta_FK")),
-                    expenseReader.GetString(expenseReader.GetOrdinal("NombreCuenta")),
-                    expenseReader["NumeroCheque"] is DBNull ? null : expenseReader.GetString(expenseReader.GetOrdinal("NumeroCheque")),
-                    expenseReader.GetString(expenseReader.GetOrdinal("NombreSubcategoria"))));
+                while (await expenseReader.ReadAsync(cancellationToken))
+                {
+                    pendingExpenses.Add(new CheckExpenseOption(
+                        expenseReader.GetInt32(expenseReader.GetOrdinal("ID_Transaccion")),
+                        expenseReader.GetDateTime(expenseReader.GetOrdinal("Fecha")),
+                        expenseReader.GetString(expenseReader.GetOrdinal("Descripcion")),
+                        expenseReader.GetDecimal(expenseReader.GetOrdinal("Monto")),
+                        expenseReader.GetInt32(expenseReader.GetOrdinal("ID_Cuenta_FK")),
+                        expenseReader.GetString(expenseReader.GetOrdinal("NombreCuenta")),
+                        expenseReader["NumeroCheque"] is DBNull ? null : expenseReader.GetString(expenseReader.GetOrdinal("NumeroCheque")),
+                        expenseReader.GetString(expenseReader.GetOrdinal("NombreSubcategoria"))));
+                }
             }
         }
 
@@ -98,10 +108,12 @@ public sealed class SqlCheckRepository(SqlConnectionFactory connectionFactory) :
                    C.VoidReason
             FROM dbo.CFS_Cheques C
             INNER JOIN dbo.CuentasBancarias B ON B.ID_Cuenta = C.CuentaBancariaId
+            WHERE C.ID_Tenant_FK = @tenantId
             ORDER BY C.FechaCheque DESC, C.Id DESC;
             """;
 
         await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@tenantId", _tenantId);
         return await ReadChecksAsync(command, cancellationToken);
     }
 
@@ -132,11 +144,13 @@ public sealed class SqlCheckRepository(SqlConnectionFactory connectionFactory) :
                    C.VoidReason
             FROM dbo.CFS_Cheques C
             INNER JOIN dbo.CuentasBancarias B ON B.ID_Cuenta = C.CuentaBancariaId
-            WHERE C.Id = @id;
+            WHERE C.Id = @id
+              AND C.ID_Tenant_FK = @tenantId;
             """;
 
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.Add("@id", SqlDbType.Int).Value = id;
+        command.Parameters.AddWithValue("@tenantId", _tenantId);
         var rows = await ReadChecksAsync(command, cancellationToken);
         return rows.FirstOrDefault();
     }
@@ -155,7 +169,7 @@ public sealed class SqlCheckRepository(SqlConnectionFactory connectionFactory) :
         await using var connection = connectionFactory.Create();
         await connection.OpenAsync(cancellationToken);
 
-        if (await HasDuplicateNumberAsync(connection, entry, cancellationToken))
+        if (await HasDuplicateNumberAsync(connection, entry, _tenantId, cancellationToken))
         {
             return new CheckSaveResult(false, null, "Ya existe un cheque activo con ese numero en la cuenta seleccionada.");
         }
@@ -165,16 +179,17 @@ public sealed class SqlCheckRepository(SqlConnectionFactory connectionFactory) :
             const string insertSql = """
                 INSERT INTO dbo.CFS_Cheques
                     (EgresoId, CuentaBancariaId, NumeroCheque, FechaCheque, Beneficiario,
-                     DireccionBeneficiario, Monto, Memo, Estado, CreatedAt, CreatedBy)
+                     DireccionBeneficiario, Monto, Memo, Estado, CreatedAt, CreatedBy, ID_Tenant_FK)
                 VALUES
                     (@expenseId, @accountId, @checkNumber, @checkDate, @payee,
-                     @payeeAddress, @amount, @memo, 'Borrador', SYSUTCDATETIME(), @user);
+                     @payeeAddress, @amount, @memo, 'Borrador', SYSUTCDATETIME(), @user, @tenantId);
                 SELECT CAST(SCOPE_IDENTITY() AS INT);
                 """;
 
             await using var command = new SqlCommand(insertSql, connection);
             AddEntryParameters(command, entry);
             command.Parameters.Add("@user", SqlDbType.NVarChar, 100).Value = userName;
+            command.Parameters.AddWithValue("@tenantId", _tenantId);
             var id = Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken));
             return new CheckSaveResult(true, id, null);
         }
@@ -190,6 +205,7 @@ public sealed class SqlCheckRepository(SqlConnectionFactory connectionFactory) :
                 Monto = @amount,
                 Memo = @memo
             WHERE Id = @id
+              AND ID_Tenant_FK = @tenantId
               AND Estado = 'Borrador';
             """;
 
@@ -197,6 +213,7 @@ public sealed class SqlCheckRepository(SqlConnectionFactory connectionFactory) :
         {
             AddEntryParameters(command, entry);
             command.Parameters.Add("@id", SqlDbType.Int).Value = entry.Id;
+            command.Parameters.AddWithValue("@tenantId", _tenantId);
             var affected = await command.ExecuteNonQueryAsync(cancellationToken);
             if (affected == 0)
             {
@@ -221,12 +238,14 @@ public sealed class SqlCheckRepository(SqlConnectionFactory connectionFactory) :
                 PrintedAt = SYSUTCDATETIME(),
                 PrintedBy = @user
             WHERE Id = @id
+              AND ID_Tenant_FK = @tenantId
               AND Estado <> 'Anulado';
             """;
 
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.Add("@id", SqlDbType.Int).Value = id;
         command.Parameters.Add("@user", SqlDbType.NVarChar, 100).Value = userName;
+        command.Parameters.AddWithValue("@tenantId", _tenantId);
         var affected = await command.ExecuteNonQueryAsync(cancellationToken);
         return affected == 0
             ? new CheckSaveResult(false, null, "No se pudo marcar el cheque como impreso.")
@@ -254,6 +273,7 @@ public sealed class SqlCheckRepository(SqlConnectionFactory connectionFactory) :
                 VoidedBy = @user,
                 VoidReason = @reason
             WHERE Id = @id
+              AND ID_Tenant_FK = @tenantId
               AND Estado <> 'Anulado';
             """;
 
@@ -261,6 +281,7 @@ public sealed class SqlCheckRepository(SqlConnectionFactory connectionFactory) :
         command.Parameters.Add("@id", SqlDbType.Int).Value = id;
         command.Parameters.Add("@user", SqlDbType.NVarChar, 100).Value = userName;
         command.Parameters.Add("@reason", SqlDbType.NVarChar, 300).Value = reason.Trim();
+        command.Parameters.AddWithValue("@tenantId", _tenantId);
         var affected = await command.ExecuteNonQueryAsync(cancellationToken);
         return affected == 0
             ? new CheckSaveResult(false, null, "No se pudo anular el cheque.")
@@ -279,6 +300,7 @@ public sealed class SqlCheckRepository(SqlConnectionFactory connectionFactory) :
     private static async Task<bool> HasDuplicateNumberAsync(
         SqlConnection connection,
         CheckEntry entry,
+        int tenantId,
         CancellationToken cancellationToken)
     {
         const string sql = """
@@ -286,6 +308,7 @@ public sealed class SqlCheckRepository(SqlConnectionFactory connectionFactory) :
             FROM dbo.CFS_Cheques
             WHERE CuentaBancariaId = @accountId
               AND NumeroCheque = @checkNumber
+              AND ID_Tenant_FK = @tenantId
               AND Estado <> 'Anulado'
               AND (@id <= 0 OR Id <> @id);
             """;
@@ -294,6 +317,7 @@ public sealed class SqlCheckRepository(SqlConnectionFactory connectionFactory) :
         command.Parameters.Add("@accountId", SqlDbType.Int).Value = entry.AccountId;
         command.Parameters.Add("@checkNumber", SqlDbType.NVarChar, 50).Value = entry.CheckNumber.Trim();
         command.Parameters.Add("@id", SqlDbType.Int).Value = entry.Id;
+        command.Parameters.AddWithValue("@tenantId", tenantId);
         return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) > 0;
     }
 

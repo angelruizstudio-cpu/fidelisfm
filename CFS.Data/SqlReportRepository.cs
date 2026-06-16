@@ -5,8 +5,10 @@ using Microsoft.Data.SqlClient;
 
 namespace CFS.Data;
 
-public sealed class SqlReportRepository(SqlConnectionFactory connectionFactory) : IReportRepository
+public sealed class SqlReportRepository(SqlConnectionFactory connectionFactory, ITenantContext tenantContext) : IReportRepository
 {
+    private readonly int _tenantId = tenantContext.TenantId;
+
     private static readonly IReadOnlyList<ReportDefinition> Catalog =
     [
         new("profit-loss", "Profit and Loss", "Resumen de ingresos, gastos y net income por categoría.", true),
@@ -27,11 +29,13 @@ public sealed class SqlReportRepository(SqlConnectionFactory connectionFactory) 
             SELECT ID_Cuenta, NombreCuenta
             FROM dbo.CuentasBancarias
             WHERE NombreCuenta NOT LIKE '%(OLD-ID-%'
+              AND ID_Tenant_FK = @tenantId
             ORDER BY NombreCuenta;
             """;
 
         var accounts = new List<ReportBankAccount>();
         await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@tenantId", _tenantId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
@@ -52,16 +56,17 @@ public sealed class SqlReportRepository(SqlConnectionFactory connectionFactory) 
 
         return request.Key switch
         {
-            "profit-loss-detail" => await GetProfitAndLossDetailAsync(connection, request, cancellationToken),
-            "balance-sheet" => await GetBalanceSheetAsync(connection, request, cancellationToken),
-            "tithes-members" => await GetTithesByMemberAsync(connection, request, cancellationToken),
-            _ => await GetProfitAndLossAsync(connection, request, cancellationToken)
+            "profit-loss-detail" => await GetProfitAndLossDetailAsync(connection, request, _tenantId, cancellationToken),
+            "balance-sheet" => await GetBalanceSheetAsync(connection, request, _tenantId, cancellationToken),
+            "tithes-members" => await GetTithesByMemberAsync(connection, request, _tenantId, cancellationToken),
+            _ => await GetProfitAndLossAsync(connection, request, _tenantId, cancellationToken)
         };
     }
 
     private static async Task<FinancialReport> GetProfitAndLossAsync(
         SqlConnection connection,
         ReportRequest request,
+        int tenantId,
         CancellationToken cancellationToken)
     {
         const string sql = """
@@ -74,6 +79,7 @@ public sealed class SqlReportRepository(SqlConnectionFactory connectionFactory) 
             INNER JOIN dbo.Categorias Cat ON Cat.ID_Categoria = S.ID_Categoria_FK
             WHERE T.Fecha >= @start
               AND T.Fecha < @end
+              AND T.ID_Tenant_FK = @tenantId
               AND ISNULL(T.Anulada, 0) = 0
               AND Cat.TipoCategoria IN ('Ingreso', 'Egreso')
               AND (@accountId IS NULL OR T.ID_Cuenta_FK = @accountId)
@@ -82,7 +88,7 @@ public sealed class SqlReportRepository(SqlConnectionFactory connectionFactory) 
             """;
 
         var groupedRows = new List<GroupedReportRow>();
-        await using var command = CreateDateCommand(sql, connection, request);
+        await using var command = CreateDateCommand(sql, connection, request, tenantId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
@@ -123,6 +129,7 @@ public sealed class SqlReportRepository(SqlConnectionFactory connectionFactory) 
     private static async Task<FinancialReport> GetProfitAndLossDetailAsync(
         SqlConnection connection,
         ReportRequest request,
+        int tenantId,
         CancellationToken cancellationToken)
     {
         const string sql = """
@@ -144,6 +151,7 @@ public sealed class SqlReportRepository(SqlConnectionFactory connectionFactory) 
             LEFT JOIN dbo.Miembros M ON M.ID_Miembro = T.ID_Miembro_FK
             WHERE T.Fecha >= @start
               AND T.Fecha < @end
+              AND T.ID_Tenant_FK = @tenantId
               AND ISNULL(T.Anulada, 0) = 0
               AND Cat.TipoCategoria IN ('Ingreso', 'Egreso')
               AND (@accountId IS NULL OR T.ID_Cuenta_FK = @accountId)
@@ -152,7 +160,7 @@ public sealed class SqlReportRepository(SqlConnectionFactory connectionFactory) 
 
         var income = new List<ReportLine>();
         var expenses = new List<ReportLine>();
-        await using var command = CreateDateCommand(sql, connection, request);
+        await using var command = CreateDateCommand(sql, connection, request, tenantId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
@@ -209,6 +217,7 @@ public sealed class SqlReportRepository(SqlConnectionFactory connectionFactory) 
     private static async Task<FinancialReport> GetBalanceSheetAsync(
         SqlConnection connection,
         ReportRequest request,
+        int tenantId,
         CancellationToken cancellationToken)
     {
         var hasStartDate = await HasAccountStartDateColumnAsync(connection, cancellationToken);
@@ -228,6 +237,7 @@ public sealed class SqlReportRepository(SqlConnectionFactory connectionFactory) 
                 SELECT SUM(MontoTotal) AS TotalDepositos
                 FROM dbo.Depositos
                 WHERE ID_Cuenta_FK = Cta.ID_Cuenta
+                  AND ID_Tenant_FK = @tenantId
                   AND FechaDeposito >= Inicio.FechaInicioSaldo
                   AND FechaDeposito <= @endDate
                   AND ISNULL(Anulado, 0) = 0
@@ -238,6 +248,7 @@ public sealed class SqlReportRepository(SqlConnectionFactory connectionFactory) 
                 INNER JOIN dbo.Subcategorias S ON S.ID_Subcategoria = T.ID_Subcategoria_FK
                 INNER JOIN dbo.Categorias Cat ON Cat.ID_Categoria = S.ID_Categoria_FK
                 WHERE T.ID_Cuenta_FK = Cta.ID_Cuenta
+                  AND T.ID_Tenant_FK = @tenantId
                   AND T.Fecha >= Inicio.FechaInicioSaldo
                   AND T.Fecha <= @endDate
                   AND Cat.TipoCategoria = 'Ingreso'
@@ -251,12 +262,14 @@ public sealed class SqlReportRepository(SqlConnectionFactory connectionFactory) 
                 INNER JOIN dbo.Subcategorias S ON S.ID_Subcategoria = T.ID_Subcategoria_FK
                 INNER JOIN dbo.Categorias Cat ON Cat.ID_Categoria = S.ID_Categoria_FK
                 WHERE T.ID_Cuenta_FK = Cta.ID_Cuenta
+                  AND T.ID_Tenant_FK = @tenantId
                   AND T.Fecha >= Inicio.FechaInicioSaldo
                   AND T.Fecha <= @endDate
                   AND Cat.TipoCategoria = 'Egreso'
                   AND ISNULL(T.Anulada, 0) = 0
             ) E
             WHERE Cta.NombreCuenta NOT LIKE '%(OLD-ID-%'
+              AND Cta.ID_Tenant_FK = @tenantId
               AND (@accountId IS NULL OR Cta.ID_Cuenta = @accountId)
             ORDER BY Cta.NombreCuenta;
             """;
@@ -265,6 +278,7 @@ public sealed class SqlReportRepository(SqlConnectionFactory connectionFactory) 
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.Add("@endDate", SqlDbType.Date).Value = request.EndDate.Date;
         command.Parameters.Add("@accountId", SqlDbType.Int).Value = request.AccountId.HasValue ? request.AccountId.Value : DBNull.Value;
+        command.Parameters.AddWithValue("@tenantId", tenantId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
@@ -297,6 +311,7 @@ public sealed class SqlReportRepository(SqlConnectionFactory connectionFactory) 
     private static async Task<FinancialReport> GetTithesByMemberAsync(
         SqlConnection connection,
         ReportRequest request,
+        int tenantId,
         CancellationToken cancellationToken)
     {
         const string sql = """
@@ -312,6 +327,7 @@ public sealed class SqlReportRepository(SqlConnectionFactory connectionFactory) 
             LEFT JOIN dbo.Miembros M ON M.ID_Miembro = T.ID_Miembro_FK
             WHERE T.Fecha >= @start
               AND T.Fecha < @end
+              AND T.ID_Tenant_FK = @tenantId
               AND ISNULL(T.Anulada, 0) = 0
               AND Cat.TipoCategoria = 'Ingreso'
               AND (S.NombreSubcategoria LIKE '%Diezm%' OR S.NombreSubcategoria LIKE '%Tithe%')
@@ -321,7 +337,7 @@ public sealed class SqlReportRepository(SqlConnectionFactory connectionFactory) 
             """;
 
         var lines = new List<ReportLine>();
-        await using var command = CreateDateCommand(sql, connection, request);
+        await using var command = CreateDateCommand(sql, connection, request, tenantId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
@@ -352,12 +368,13 @@ public sealed class SqlReportRepository(SqlConnectionFactory connectionFactory) 
             DateTime.Now);
     }
 
-    private static SqlCommand CreateDateCommand(string sql, SqlConnection connection, ReportRequest request)
+    private static SqlCommand CreateDateCommand(string sql, SqlConnection connection, ReportRequest request, int tenantId)
     {
         var command = new SqlCommand(sql, connection);
         command.Parameters.Add("@start", SqlDbType.Date).Value = request.StartDate.Date;
         command.Parameters.Add("@end", SqlDbType.Date).Value = request.EndDate.Date.AddDays(1);
         command.Parameters.Add("@accountId", SqlDbType.Int).Value = request.AccountId.HasValue ? request.AccountId.Value : DBNull.Value;
+        command.Parameters.AddWithValue("@tenantId", tenantId);
         return command;
     }
 

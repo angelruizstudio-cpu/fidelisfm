@@ -5,8 +5,10 @@ using Microsoft.Data.SqlClient;
 
 namespace CFS.Data;
 
-public sealed class SqlExpenseRepository(SqlConnectionFactory connectionFactory) : IExpenseRepository
+public sealed class SqlExpenseRepository(SqlConnectionFactory connectionFactory, ITenantContext tenantContext) : IExpenseRepository
 {
+    private readonly int _tenantId = tenantContext.TenantId;
+
     private static readonly string[] DefaultPaymentMethods =
     [
         "Cheque",
@@ -24,7 +26,8 @@ public sealed class SqlExpenseRepository(SqlConnectionFactory connectionFactory)
 
         var accounts = await LoadOptionsAsync(
             connection,
-            "SELECT ID_Cuenta, NombreCuenta FROM dbo.CuentasBancarias ORDER BY NombreCuenta;",
+            "SELECT ID_Cuenta, NombreCuenta FROM dbo.CuentasBancarias WHERE ID_Tenant_FK = @tenantId ORDER BY NombreCuenta;",
+            _tenantId,
             cancellationToken);
 
         var subcategories = await LoadOptionsAsync(
@@ -34,11 +37,13 @@ public sealed class SqlExpenseRepository(SqlConnectionFactory connectionFactory)
             FROM dbo.Subcategorias S
             INNER JOIN dbo.Categorias C ON C.ID_Categoria = S.ID_Categoria_FK
             WHERE C.TipoCategoria = 'Egreso'
+              AND S.ID_Tenant_FK = @tenantId
             ORDER BY C.NombreCategoria, S.NombreSubcategoria;
             """,
+            _tenantId,
             cancellationToken);
 
-        var paymentMethods = await LoadPaymentMethodsAsync(connection, cancellationToken);
+        var paymentMethods = await LoadPaymentMethodsAsync(connection, _tenantId, cancellationToken);
         return new ExpenseLookups(accounts, subcategories, paymentMethods);
     }
 
@@ -72,12 +77,14 @@ public sealed class SqlExpenseRepository(SqlConnectionFactory connectionFactory)
             INNER JOIN dbo.Categorias C ON C.ID_Categoria = S.ID_Categoria_FK
             INNER JOIN dbo.CuentasBancarias Cta ON Cta.ID_Cuenta = T.ID_Cuenta_FK
             WHERE C.TipoCategoria = 'Egreso'
+              AND T.ID_Tenant_FK = @tenantId
               AND T.Fecha >= @start
               AND T.Fecha < @end
             ORDER BY T.Fecha DESC, T.ID_Transaccion DESC;
             """;
 
         await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@tenantId", _tenantId);
         command.Parameters.Add("@start", SqlDbType.Date).Value = start;
         command.Parameters.Add("@end", SqlDbType.Date).Value = end;
         return await ReadExpenseTransactionsAsync(command, cancellationToken);
@@ -107,11 +114,13 @@ public sealed class SqlExpenseRepository(SqlConnectionFactory connectionFactory)
             INNER JOIN dbo.Categorias C ON C.ID_Categoria = S.ID_Categoria_FK
             INNER JOIN dbo.CuentasBancarias Cta ON Cta.ID_Cuenta = T.ID_Cuenta_FK
             WHERE T.ID_Transaccion = @id
+              AND T.ID_Tenant_FK = @tenantId
               AND C.TipoCategoria = 'Egreso';
             """;
 
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.Add("@id", SqlDbType.Int).Value = id;
+        command.Parameters.AddWithValue("@tenantId", _tenantId);
         var rows = await ReadExpenseTransactionsAsync(command, cancellationToken);
         return rows.FirstOrDefault();
     }
@@ -134,7 +143,7 @@ public sealed class SqlExpenseRepository(SqlConnectionFactory connectionFactory)
 
         try
         {
-            var subcategoryName = await GetSubcategoryNameAsync(connection, transaction, entry.SubcategoryId, cancellationToken);
+            var subcategoryName = await GetSubcategoryNameAsync(connection, transaction, entry.SubcategoryId, _tenantId, cancellationToken);
             if (subcategoryName is null)
             {
                 await transaction.RollbackAsync(cancellationToken);
@@ -142,21 +151,21 @@ public sealed class SqlExpenseRepository(SqlConnectionFactory connectionFactory)
             }
 
             if (entry.Id <= 0 && !ignorePossibleDuplicate &&
-                await HasPossibleDuplicateAsync(connection, transaction, entry, cancellationToken))
+                await HasPossibleDuplicateAsync(connection, transaction, entry, _tenantId, cancellationToken))
             {
                 await transaction.RollbackAsync(cancellationToken);
                 return new ExpenseSaveResult(false, null, true, "Posible duplicado detectado.");
             }
 
-            if (await HasDuplicateCheckAsync(connection, transaction, entry, cancellationToken))
+            if (await HasDuplicateCheckAsync(connection, transaction, entry, _tenantId, cancellationToken))
             {
                 await transaction.RollbackAsync(cancellationToken);
                 return new ExpenseSaveResult(false, null, false, "Ya existe una transacción activa con ese número de cheque.");
             }
 
             var savedId = entry.Id <= 0
-                ? await InsertExpenseAsync(connection, transaction, entry, subcategoryName, userName, cancellationToken)
-                : await UpdateExpenseAsync(connection, transaction, entry, userName, cancellationToken);
+                ? await InsertExpenseAsync(connection, transaction, entry, subcategoryName, userName, _tenantId, cancellationToken)
+                : await UpdateExpenseAsync(connection, transaction, entry, userName, _tenantId, cancellationToken);
 
             await transaction.CommitAsync(cancellationToken);
             return new ExpenseSaveResult(true, savedId, false, null);
@@ -199,6 +208,7 @@ public sealed class SqlExpenseRepository(SqlConnectionFactory connectionFactory)
                 INNER JOIN dbo.Subcategorias S ON S.ID_Subcategoria = T.ID_Subcategoria_FK
                 INNER JOIN dbo.Categorias C ON C.ID_Categoria = S.ID_Categoria_FK
                 WHERE T.ID_Transaccion = @id
+                  AND T.ID_Tenant_FK = @tenantId
                   AND C.TipoCategoria = 'Egreso';
                 """;
 
@@ -210,6 +220,7 @@ public sealed class SqlExpenseRepository(SqlConnectionFactory connectionFactory)
             await using (var command = new SqlCommand(getSql, connection, transaction))
             {
                 command.Parameters.Add("@id", SqlDbType.Int).Value = id;
+                command.Parameters.AddWithValue("@tenantId", _tenantId);
                 await using var reader = await command.ExecuteReaderAsync(cancellationToken);
                 if (!await reader.ReadAsync(cancellationToken))
                 {
@@ -243,7 +254,8 @@ public sealed class SqlExpenseRepository(SqlConnectionFactory connectionFactory)
                     FechaAnulacion = GETDATE(),
                     UsuarioAnulacion = @user,
                     MotivoAnulacion = @reason
-                WHERE ID_Transaccion = @id;
+                WHERE ID_Transaccion = @id
+                  AND ID_Tenant_FK = @tenantId;
                 """;
 
             await using (var command = new SqlCommand(updateSql, connection, transaction))
@@ -251,6 +263,7 @@ public sealed class SqlExpenseRepository(SqlConnectionFactory connectionFactory)
                 command.Parameters.Add("@user", SqlDbType.NVarChar, 100).Value = userName;
                 command.Parameters.Add("@reason", SqlDbType.NVarChar, 255).Value = reason.Trim();
                 command.Parameters.Add("@id", SqlDbType.Int).Value = id;
+                command.Parameters.AddWithValue("@tenantId", _tenantId);
                 await command.ExecuteNonQueryAsync(cancellationToken);
             }
 
@@ -280,10 +293,12 @@ public sealed class SqlExpenseRepository(SqlConnectionFactory connectionFactory)
     private static async Task<IReadOnlyList<LookupOption>> LoadOptionsAsync(
         SqlConnection connection,
         string sql,
+        int tenantId,
         CancellationToken cancellationToken)
     {
         var options = new List<LookupOption>();
         await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@tenantId", tenantId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
@@ -295,6 +310,7 @@ public sealed class SqlExpenseRepository(SqlConnectionFactory connectionFactory)
 
     private static async Task<IReadOnlyList<string>> LoadPaymentMethodsAsync(
         SqlConnection connection,
+        int tenantId,
         CancellationToken cancellationToken)
     {
         var methods = new SortedSet<string>(DefaultPaymentMethods, StringComparer.OrdinalIgnoreCase);
@@ -307,10 +323,12 @@ public sealed class SqlExpenseRepository(SqlConnectionFactory connectionFactory)
             WHERE C.TipoCategoria = 'Egreso'
               AND T.MetodoPago IS NOT NULL
               AND LTRIM(RTRIM(T.MetodoPago)) <> ''
+              AND T.ID_Tenant_FK = @tenantId
             ORDER BY T.MetodoPago;
             """,
             connection);
 
+        command.Parameters.AddWithValue("@tenantId", tenantId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
@@ -350,6 +368,7 @@ public sealed class SqlExpenseRepository(SqlConnectionFactory connectionFactory)
         SqlConnection connection,
         SqlTransaction transaction,
         int subcategoryId,
+        int tenantId,
         CancellationToken cancellationToken)
     {
         const string sql = """
@@ -357,11 +376,13 @@ public sealed class SqlExpenseRepository(SqlConnectionFactory connectionFactory)
             FROM dbo.Subcategorias S
             INNER JOIN dbo.Categorias C ON C.ID_Categoria = S.ID_Categoria_FK
             WHERE S.ID_Subcategoria = @id
+              AND S.ID_Tenant_FK = @tenantId
               AND C.TipoCategoria = 'Egreso';
             """;
 
         await using var command = new SqlCommand(sql, connection, transaction);
         command.Parameters.Add("@id", SqlDbType.Int).Value = subcategoryId;
+        command.Parameters.AddWithValue("@tenantId", tenantId);
         return await command.ExecuteScalarAsync(cancellationToken) as string;
     }
 
@@ -369,6 +390,7 @@ public sealed class SqlExpenseRepository(SqlConnectionFactory connectionFactory)
         SqlConnection connection,
         SqlTransaction transaction,
         ExpenseEntry entry,
+        int tenantId,
         CancellationToken cancellationToken)
     {
         const string sql = """
@@ -381,6 +403,7 @@ public sealed class SqlExpenseRepository(SqlConnectionFactory connectionFactory)
               AND T.Monto = @amount
               AND T.ID_Subcategoria_FK = @subcategoryId
               AND ISNULL(T.Anulada, 0) = 0
+              AND T.ID_Tenant_FK = @tenantId
               AND LTRIM(RTRIM(ISNULL(T.Descripcion, ''))) = @description;
             """;
 
@@ -389,6 +412,7 @@ public sealed class SqlExpenseRepository(SqlConnectionFactory connectionFactory)
         command.Parameters.Add("@amount", SqlDbType.Money).Value = entry.Amount;
         command.Parameters.Add("@subcategoryId", SqlDbType.Int).Value = entry.SubcategoryId;
         command.Parameters.Add("@description", SqlDbType.VarChar, 300).Value = entry.Description.Trim();
+        command.Parameters.AddWithValue("@tenantId", tenantId);
         return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) > 0;
     }
 
@@ -396,6 +420,7 @@ public sealed class SqlExpenseRepository(SqlConnectionFactory connectionFactory)
         SqlConnection connection,
         SqlTransaction transaction,
         ExpenseEntry entry,
+        int tenantId,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(entry.CheckNumber) ||
@@ -409,12 +434,14 @@ public sealed class SqlExpenseRepository(SqlConnectionFactory connectionFactory)
             FROM dbo.Transacciones
             WHERE NumeroCheque = @checkNumber
               AND ISNULL(Anulada, 0) = 0
+              AND ID_Tenant_FK = @tenantId
               AND (@currentId <= 0 OR ID_Transaccion <> @currentId);
             """;
 
         await using var command = new SqlCommand(sql, connection, transaction);
         command.Parameters.Add("@checkNumber", SqlDbType.VarChar, 50).Value = entry.CheckNumber.Trim();
         command.Parameters.Add("@currentId", SqlDbType.Int).Value = entry.Id;
+        command.Parameters.AddWithValue("@tenantId", tenantId);
         return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) > 0;
     }
 
@@ -424,18 +451,20 @@ public sealed class SqlExpenseRepository(SqlConnectionFactory connectionFactory)
         ExpenseEntry entry,
         string subcategoryName,
         string userName,
+        int tenantId,
         CancellationToken cancellationToken)
     {
         const string sql = """
             INSERT INTO dbo.Transacciones
-                (Fecha, Descripcion, Monto, ID_Cuenta_FK, ID_Subcategoria_FK, ID_Miembro_FK, MetodoPago, NumeroCheque)
+                (Fecha, Descripcion, Monto, ID_Cuenta_FK, ID_Subcategoria_FK, ID_Miembro_FK, MetodoPago, NumeroCheque, ID_Tenant_FK)
             VALUES
-                (@date, @description, @amount, @accountId, @subcategoryId, NULL, @paymentMethod, @checkNumber);
+                (@date, @description, @amount, @accountId, @subcategoryId, NULL, @paymentMethod, @checkNumber, @tenantId);
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
 
         await using var command = new SqlCommand(sql, connection, transaction);
         AddEntryParameters(command, entry);
+        command.Parameters.AddWithValue("@tenantId", tenantId);
         var id = Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken));
 
         await AdjustAccountBalanceAsync(connection, transaction, entry.AccountId, -entry.Amount, cancellationToken);
@@ -456,6 +485,7 @@ public sealed class SqlExpenseRepository(SqlConnectionFactory connectionFactory)
         SqlTransaction transaction,
         ExpenseEntry entry,
         string userName,
+        int tenantId,
         CancellationToken cancellationToken)
     {
         const string getSql = """
@@ -467,6 +497,7 @@ public sealed class SqlExpenseRepository(SqlConnectionFactory connectionFactory)
             INNER JOIN dbo.Subcategorias S ON S.ID_Subcategoria = T.ID_Subcategoria_FK
             INNER JOIN dbo.Categorias C ON C.ID_Categoria = S.ID_Categoria_FK
             WHERE T.ID_Transaccion = @id
+              AND T.ID_Tenant_FK = @tenantId
               AND C.TipoCategoria = 'Egreso';
             """;
 
@@ -478,6 +509,7 @@ public sealed class SqlExpenseRepository(SqlConnectionFactory connectionFactory)
         await using (var command = new SqlCommand(getSql, connection, transaction))
         {
             command.Parameters.Add("@id", SqlDbType.Int).Value = entry.Id;
+            command.Parameters.AddWithValue("@tenantId", tenantId);
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             if (!await reader.ReadAsync(cancellationToken))
             {
@@ -503,13 +535,15 @@ public sealed class SqlExpenseRepository(SqlConnectionFactory connectionFactory)
                 ID_Miembro_FK = NULL,
                 MetodoPago = @paymentMethod,
                 NumeroCheque = @checkNumber
-            WHERE ID_Transaccion = @id;
+            WHERE ID_Transaccion = @id
+              AND ID_Tenant_FK = @tenantId;
             """;
 
         await using (var command = new SqlCommand(updateSql, connection, transaction))
         {
             AddEntryParameters(command, entry);
             command.Parameters.Add("@id", SqlDbType.Int).Value = entry.Id;
+            command.Parameters.AddWithValue("@tenantId", tenantId);
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
 
