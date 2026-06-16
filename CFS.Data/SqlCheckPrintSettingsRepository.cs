@@ -5,8 +5,10 @@ using Microsoft.Data.SqlClient;
 
 namespace CFS.Data;
 
-public sealed class SqlCheckPrintSettingsRepository(SqlConnectionFactory connectionFactory) : ICheckPrintSettingsRepository
+public sealed class SqlCheckPrintSettingsRepository(SqlConnectionFactory connectionFactory, ITenantContext tenantContext) : ICheckPrintSettingsRepository
 {
+    private readonly int _tenantId = tenantContext.TenantId;
+
     public async Task<CheckPrintSettings> GetAsync(CancellationToken cancellationToken = default)
     {
         await using var connection = connectionFactory.Create();
@@ -48,10 +50,11 @@ public sealed class SqlCheckPrintSettingsRepository(SqlConnectionFactory connect
                    UpdatedAt,
                    UpdatedBy
             FROM dbo.CFS_CheckPrintSettings
-            WHERE Id = 1;
+            WHERE ID_Tenant_FK = @tenantId;
             """;
 
         await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@tenantId", _tenantId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         return await reader.ReadAsync(cancellationToken)
             ? ReadSettings(reader)
@@ -73,8 +76,8 @@ public sealed class SqlCheckPrintSettingsRepository(SqlConnectionFactory connect
 
         const string sql = """
             MERGE dbo.CFS_CheckPrintSettings AS Target
-            USING (SELECT 1 AS Id) AS Source
-               ON Target.Id = Source.Id
+            USING (SELECT @tenantId AS ID_Tenant_FK) AS Source
+               ON Target.ID_Tenant_FK = Source.ID_Tenant_FK
             WHEN MATCHED THEN
                 UPDATE SET
                     SheetOffsetX = @sheetOffsetX,
@@ -107,13 +110,13 @@ public sealed class SqlCheckPrintSettingsRepository(SqlConnectionFactory connect
                     UpdatedBy = @user
             WHEN NOT MATCHED THEN
                 INSERT
-                    (Id, SheetOffsetX, SheetOffsetY, DateLeft, DateTop, PayeeLeft, PayeeTop,
+                    (ID_Tenant_FK, SheetOffsetX, SheetOffsetY, DateLeft, DateTop, PayeeLeft, PayeeTop,
                      AmountLeft, AmountTop, WordsLeft, WordsTop, AddressLeft, AddressTop,
                      MemoLeft, MemoTop, StubTitleLeft, StubTitleTop, StubPayeeLeft, StubPayeeTop,
                      StubDateLeft, StubDateTop, StubAccountLeft, StubAccountTop, StubMemoLeft,
                      StubMemoTop, StubAmountLeft, StubAmountTop, UpdatedAt, UpdatedBy)
                 VALUES
-                    (1, @sheetOffsetX, @sheetOffsetY, @dateLeft, @dateTop, @payeeLeft, @payeeTop,
+                    (@tenantId, @sheetOffsetX, @sheetOffsetY, @dateLeft, @dateTop, @payeeLeft, @payeeTop,
                      @amountLeft, @amountTop, @wordsLeft, @wordsTop, @addressLeft, @addressTop,
                      @memoLeft, @memoTop, @stubTitleLeft, @stubTitleTop, @stubPayeeLeft, @stubPayeeTop,
                      @stubDateLeft, @stubDateTop, @stubAccountLeft, @stubAccountTop, @stubMemoLeft,
@@ -123,6 +126,7 @@ public sealed class SqlCheckPrintSettingsRepository(SqlConnectionFactory connect
         await using var command = new SqlCommand(sql, connection);
         AddParameters(command, entry);
         command.Parameters.Add("@user", SqlDbType.NVarChar, 100).Value = userName;
+        command.Parameters.AddWithValue("@tenantId", _tenantId);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 

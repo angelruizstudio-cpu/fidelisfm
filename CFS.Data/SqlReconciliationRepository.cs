@@ -5,8 +5,10 @@ using Microsoft.Data.SqlClient;
 
 namespace CFS.Data;
 
-public sealed class SqlReconciliationRepository(SqlConnectionFactory connectionFactory) : IReconciliationRepository
+public sealed class SqlReconciliationRepository(SqlConnectionFactory connectionFactory, ITenantContext tenantContext) : IReconciliationRepository
 {
+    private readonly int _tenantId = tenantContext.TenantId;
+
     public async Task<ReconciliationLookups> GetLookupsAsync(CancellationToken cancellationToken = default)
     {
         await using var connection = connectionFactory.Create();
@@ -14,8 +16,9 @@ public sealed class SqlReconciliationRepository(SqlConnectionFactory connectionF
 
         var accounts = new List<LookupOption>();
         await using var command = new SqlCommand(
-            "SELECT ID_Cuenta, NombreCuenta FROM dbo.CuentasBancarias WHERE NombreCuenta NOT LIKE '%(OLD-ID-%' ORDER BY NombreCuenta;",
+            "SELECT ID_Cuenta, NombreCuenta FROM dbo.CuentasBancarias WHERE NombreCuenta NOT LIKE '%(OLD-ID-%' AND ID_Tenant_FK = @tenantId ORDER BY NombreCuenta;",
             connection);
+        command.Parameters.AddWithValue("@tenantId", _tenantId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
@@ -33,10 +36,10 @@ public sealed class SqlReconciliationRepository(SqlConnectionFactory connectionF
         await using var connection = connectionFactory.Create();
         await connection.OpenAsync(cancellationToken);
 
-        var startingPoint = await GetBeginningBalanceAsync(connection, accountId, statementDate, cancellationToken);
-        var deposits = await GetDepositCandidatesAsync(connection, accountId, statementDate, cancellationToken);
-        var transactions = await GetTransactionCandidatesAsync(connection, accountId, statementDate, cancellationToken);
-        var recent = await GetRecentAsync(connection, accountId, cancellationToken);
+        var startingPoint = await GetBeginningBalanceAsync(connection, accountId, statementDate, _tenantId, cancellationToken);
+        var deposits = await GetDepositCandidatesAsync(connection, accountId, statementDate, _tenantId, cancellationToken);
+        var transactions = await GetTransactionCandidatesAsync(connection, accountId, statementDate, _tenantId, cancellationToken);
+        var recent = await GetRecentAsync(connection, accountId, _tenantId, cancellationToken);
 
         return new ReconciliationWorkspace(startingPoint.Balance, startingPoint.LastStatementDate, deposits, transactions, recent);
     }
@@ -57,8 +60,8 @@ public sealed class SqlReconciliationRepository(SqlConnectionFactory connectionF
 
         try
         {
-            var beginningBalance = await GetBeginningBalanceAsync(connection, entry.AccountId, entry.StatementDate, transaction, cancellationToken);
-            var selectedTotal = await GetSelectedTotalAsync(connection, transaction, entry, cancellationToken);
+            var beginningBalance = await GetBeginningBalanceAsync(connection, entry.AccountId, entry.StatementDate, _tenantId, transaction, cancellationToken);
+            var selectedTotal = await GetSelectedTotalAsync(connection, transaction, entry, _tenantId, cancellationToken);
             var clearedBalance = beginningBalance.Balance + selectedTotal;
 
             if (clearedBalance != entry.StatementBalance)
@@ -68,8 +71,8 @@ public sealed class SqlReconciliationRepository(SqlConnectionFactory connectionF
             }
 
             const string insertSql = """
-                INSERT INTO dbo.Conciliaciones (ID_Cuenta_FK, FechaConciliacion, SaldoEstadoCuenta)
-                VALUES (@accountId, @date, @balance);
+                INSERT INTO dbo.Conciliaciones (ID_Cuenta_FK, FechaConciliacion, SaldoEstadoCuenta, ID_Tenant_FK)
+                VALUES (@accountId, @date, @balance, @tenantId);
                 SELECT CAST(SCOPE_IDENTITY() AS INT);
                 """;
 
@@ -79,11 +82,12 @@ public sealed class SqlReconciliationRepository(SqlConnectionFactory connectionF
                 command.Parameters.Add("@accountId", SqlDbType.Int).Value = entry.AccountId;
                 command.Parameters.Add("@date", SqlDbType.Date).Value = entry.StatementDate.Date;
                 command.Parameters.Add("@balance", SqlDbType.Decimal).Value = entry.StatementBalance;
+                command.Parameters.AddWithValue("@tenantId", _tenantId);
                 reconciliationId = Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken));
             }
 
-            await MarkDepositsAsync(connection, transaction, entry.DepositIds, entry.AccountId, entry.StatementDate, cancellationToken);
-            await MarkTransactionsAsync(connection, transaction, entry.TransactionIds, entry.AccountId, entry.StatementDate, cancellationToken);
+            await MarkDepositsAsync(connection, transaction, entry.DepositIds, entry.AccountId, entry.StatementDate, _tenantId, cancellationToken);
+            await MarkTransactionsAsync(connection, transaction, entry.TransactionIds, entry.AccountId, entry.StatementDate, _tenantId, cancellationToken);
 
             await transaction.CommitAsync(cancellationToken);
             return new ReconciliationSaveResult(true, reconciliationId, null);
@@ -99,6 +103,7 @@ public sealed class SqlReconciliationRepository(SqlConnectionFactory connectionF
         SqlConnection connection,
         int accountId,
         DateTime statementDate,
+        int tenantId,
         CancellationToken cancellationToken)
     {
         await using var command = new SqlCommand(
@@ -106,6 +111,7 @@ public sealed class SqlReconciliationRepository(SqlConnectionFactory connectionF
             connection);
         command.Parameters.Add("@accountId", SqlDbType.Int).Value = accountId;
         command.Parameters.Add("@statementDate", SqlDbType.Date).Value = statementDate.Date;
+        command.Parameters.AddWithValue("@tenantId", tenantId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken))
         {
@@ -119,6 +125,7 @@ public sealed class SqlReconciliationRepository(SqlConnectionFactory connectionF
         SqlConnection connection,
         int accountId,
         DateTime statementDate,
+        int tenantId,
         SqlTransaction transaction,
         CancellationToken cancellationToken)
     {
@@ -128,6 +135,7 @@ public sealed class SqlReconciliationRepository(SqlConnectionFactory connectionF
             transaction);
         command.Parameters.Add("@accountId", SqlDbType.Int).Value = accountId;
         command.Parameters.Add("@statementDate", SqlDbType.Date).Value = statementDate.Date;
+        command.Parameters.AddWithValue("@tenantId", tenantId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken))
         {
@@ -147,10 +155,12 @@ public sealed class SqlReconciliationRepository(SqlConnectionFactory connectionF
                    R.FechaConciliacion
             FROM dbo.Conciliaciones R
             WHERE R.ID_Cuenta_FK = Cta.ID_Cuenta
+              AND R.ID_Tenant_FK = @tenantId
               AND R.FechaConciliacion < @statementDate
             ORDER BY R.FechaConciliacion DESC, R.ID_Conciliacion DESC
         ) Prev
-        WHERE Cta.ID_Cuenta = @accountId;
+        WHERE Cta.ID_Cuenta = @accountId
+          AND Cta.ID_Tenant_FK = @tenantId;
         """;
 
     private static ReconciliationStartingPoint ReadStartingPoint(SqlDataReader reader)
@@ -169,6 +179,7 @@ public sealed class SqlReconciliationRepository(SqlConnectionFactory connectionF
         SqlConnection connection,
         int accountId,
         DateTime statementDate,
+        int tenantId,
         CancellationToken cancellationToken)
     {
         const string sql = """
@@ -177,6 +188,7 @@ public sealed class SqlReconciliationRepository(SqlConnectionFactory connectionF
                    MontoTotal
             FROM dbo.Depositos
             WHERE ID_Cuenta_FK = @accountId
+              AND ID_Tenant_FK = @tenantId
               AND FechaDeposito <= @statementDate
               AND ISNULL(Anulado, 0) = 0
               AND ISNULL(Conciliado, 0) = 0
@@ -187,6 +199,7 @@ public sealed class SqlReconciliationRepository(SqlConnectionFactory connectionF
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.Add("@accountId", SqlDbType.Int).Value = accountId;
         command.Parameters.Add("@statementDate", SqlDbType.Date).Value = statementDate.Date;
+        command.Parameters.AddWithValue("@tenantId", tenantId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
@@ -207,6 +220,7 @@ public sealed class SqlReconciliationRepository(SqlConnectionFactory connectionF
         SqlConnection connection,
         int accountId,
         DateTime statementDate,
+        int tenantId,
         CancellationToken cancellationToken)
     {
         const string sql = """
@@ -221,6 +235,7 @@ public sealed class SqlReconciliationRepository(SqlConnectionFactory connectionF
             INNER JOIN dbo.Subcategorias S ON S.ID_Subcategoria = T.ID_Subcategoria_FK
             INNER JOIN dbo.Categorias C ON C.ID_Categoria = S.ID_Categoria_FK
             WHERE T.ID_Cuenta_FK = @accountId
+              AND T.ID_Tenant_FK = @tenantId
               AND T.Fecha <= @statementDate
               AND ISNULL(T.Anulada, 0) = 0
               AND ISNULL(T.Conciliada, 0) = 0
@@ -239,6 +254,7 @@ public sealed class SqlReconciliationRepository(SqlConnectionFactory connectionF
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.Add("@accountId", SqlDbType.Int).Value = accountId;
         command.Parameters.Add("@statementDate", SqlDbType.Date).Value = statementDate.Date;
+        command.Parameters.AddWithValue("@tenantId", tenantId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
@@ -270,6 +286,7 @@ public sealed class SqlReconciliationRepository(SqlConnectionFactory connectionF
     private static async Task<IReadOnlyList<ReconciliationSummary>> GetRecentAsync(
         SqlConnection connection,
         int accountId,
+        int tenantId,
         CancellationToken cancellationToken)
     {
         const string sql = """
@@ -282,12 +299,14 @@ public sealed class SqlReconciliationRepository(SqlConnectionFactory connectionF
             FROM dbo.Conciliaciones R
             INNER JOIN dbo.CuentasBancarias C ON C.ID_Cuenta = R.ID_Cuenta_FK
             WHERE R.ID_Cuenta_FK = @accountId
+              AND R.ID_Tenant_FK = @tenantId
             ORDER BY R.FechaConciliacion DESC, R.ID_Conciliacion DESC;
             """;
 
         var rows = new List<ReconciliationSummary>();
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.Add("@accountId", SqlDbType.Int).Value = accountId;
+        command.Parameters.AddWithValue("@tenantId", tenantId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
@@ -306,11 +325,12 @@ public sealed class SqlReconciliationRepository(SqlConnectionFactory connectionF
         SqlConnection connection,
         SqlTransaction transaction,
         ReconciliationEntry entry,
+        int tenantId,
         CancellationToken cancellationToken)
     {
         var total = 0m;
-        total += await SumDepositsAsync(connection, transaction, entry.DepositIds, entry.AccountId, entry.StatementDate, cancellationToken);
-        total += await SumTransactionsAsync(connection, transaction, entry.TransactionIds, entry.AccountId, entry.StatementDate, cancellationToken);
+        total += await SumDepositsAsync(connection, transaction, entry.DepositIds, entry.AccountId, entry.StatementDate, tenantId, cancellationToken);
+        total += await SumTransactionsAsync(connection, transaction, entry.TransactionIds, entry.AccountId, entry.StatementDate, tenantId, cancellationToken);
         return total;
     }
 
@@ -320,6 +340,7 @@ public sealed class SqlReconciliationRepository(SqlConnectionFactory connectionF
         IReadOnlyCollection<int> ids,
         int accountId,
         DateTime statementDate,
+        int tenantId,
         CancellationToken cancellationToken)
     {
         if (ids.Count == 0)
@@ -333,6 +354,7 @@ public sealed class SqlReconciliationRepository(SqlConnectionFactory connectionF
             FROM dbo.Depositos
             WHERE ID_Deposito IN ({string.Join(", ", parameterNames)})
               AND ID_Cuenta_FK = @accountId
+              AND ID_Tenant_FK = @tenantId
               AND FechaDeposito <= @statementDate
               AND ISNULL(Anulado, 0) = 0
               AND ISNULL(Conciliado, 0) = 0;
@@ -341,6 +363,7 @@ public sealed class SqlReconciliationRepository(SqlConnectionFactory connectionF
         await using var command = new SqlCommand(sql, connection, transaction);
         command.Parameters.Add("@accountId", SqlDbType.Int).Value = accountId;
         command.Parameters.Add("@statementDate", SqlDbType.Date).Value = statementDate.Date;
+        command.Parameters.AddWithValue("@tenantId", tenantId);
         AddIdParameters(command, parameterNames, ids);
         return Convert.ToDecimal(await command.ExecuteScalarAsync(cancellationToken));
     }
@@ -351,6 +374,7 @@ public sealed class SqlReconciliationRepository(SqlConnectionFactory connectionF
         IReadOnlyCollection<int> ids,
         int accountId,
         DateTime statementDate,
+        int tenantId,
         CancellationToken cancellationToken)
     {
         if (ids.Count == 0)
@@ -366,6 +390,7 @@ public sealed class SqlReconciliationRepository(SqlConnectionFactory connectionF
             INNER JOIN dbo.Categorias C ON C.ID_Categoria = S.ID_Categoria_FK
             WHERE T.ID_Transaccion IN ({string.Join(", ", parameterNames)})
               AND T.ID_Cuenta_FK = @accountId
+              AND T.ID_Tenant_FK = @tenantId
               AND T.Fecha <= @statementDate
               AND ISNULL(T.Anulada, 0) = 0
               AND ISNULL(T.Conciliada, 0) = 0
@@ -382,6 +407,7 @@ public sealed class SqlReconciliationRepository(SqlConnectionFactory connectionF
         await using var command = new SqlCommand(sql, connection, transaction);
         command.Parameters.Add("@accountId", SqlDbType.Int).Value = accountId;
         command.Parameters.Add("@statementDate", SqlDbType.Date).Value = statementDate.Date;
+        command.Parameters.AddWithValue("@tenantId", tenantId);
         AddIdParameters(command, parameterNames, ids);
         return Convert.ToDecimal(await command.ExecuteScalarAsync(cancellationToken));
     }
@@ -392,6 +418,7 @@ public sealed class SqlReconciliationRepository(SqlConnectionFactory connectionF
         IReadOnlyCollection<int> ids,
         int accountId,
         DateTime statementDate,
+        int tenantId,
         CancellationToken cancellationToken)
     {
         if (ids.Count == 0)
@@ -405,6 +432,7 @@ public sealed class SqlReconciliationRepository(SqlConnectionFactory connectionF
             SET Conciliado = 1
             WHERE ID_Deposito IN ({string.Join(", ", parameterNames)})
               AND ID_Cuenta_FK = @accountId
+              AND ID_Tenant_FK = @tenantId
               AND FechaDeposito <= @statementDate
               AND ISNULL(Anulado, 0) = 0
               AND ISNULL(Conciliado, 0) = 0;
@@ -412,6 +440,7 @@ public sealed class SqlReconciliationRepository(SqlConnectionFactory connectionF
         await using var command = new SqlCommand(sql, connection, transaction);
         command.Parameters.Add("@accountId", SqlDbType.Int).Value = accountId;
         command.Parameters.Add("@statementDate", SqlDbType.Date).Value = statementDate.Date;
+        command.Parameters.AddWithValue("@tenantId", tenantId);
         AddIdParameters(command, parameterNames, ids);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -422,6 +451,7 @@ public sealed class SqlReconciliationRepository(SqlConnectionFactory connectionF
         IReadOnlyCollection<int> ids,
         int accountId,
         DateTime statementDate,
+        int tenantId,
         CancellationToken cancellationToken)
     {
         if (ids.Count == 0)
@@ -438,6 +468,7 @@ public sealed class SqlReconciliationRepository(SqlConnectionFactory connectionF
             INNER JOIN dbo.Categorias C ON C.ID_Categoria = S.ID_Categoria_FK
             WHERE T.ID_Transaccion IN ({string.Join(", ", parameterNames)})
               AND T.ID_Cuenta_FK = @accountId
+              AND T.ID_Tenant_FK = @tenantId
               AND T.Fecha <= @statementDate
               AND ISNULL(T.Anulada, 0) = 0
               AND ISNULL(T.Conciliada, 0) = 0
@@ -453,6 +484,7 @@ public sealed class SqlReconciliationRepository(SqlConnectionFactory connectionF
         await using var command = new SqlCommand(sql, connection, transaction);
         command.Parameters.Add("@accountId", SqlDbType.Int).Value = accountId;
         command.Parameters.Add("@statementDate", SqlDbType.Date).Value = statementDate.Date;
+        command.Parameters.AddWithValue("@tenantId", tenantId);
         AddIdParameters(command, parameterNames, ids);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
