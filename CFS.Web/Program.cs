@@ -32,6 +32,7 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.SlidingExpiration = true;
     });
 builder.Services.AddAuthorization();
+builder.Services.AddScoped<ITenantContext, HttpTenantContext>();
 builder.Services.AddScoped<ISubscriptionService, StaticSubscriptionService>();
 builder.Services.AddHttpClient<IAiAdvisorService, OpenAiAdvisorService>();
 
