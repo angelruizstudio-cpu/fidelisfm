@@ -1,0 +1,205 @@
+@page "/ia"
+@rendermode InteractiveServer
+@inject IAiAdvisorService AiAdvisorService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ISubscriptionService SubscriptionService
+
+<PageTitle>Fidelis Asistente IA</PageTitle>
+
+<div class="screen-header">
+    <div>
+        <p class="eyebrow">AI Advisor</p>
+        <h1>Asistente IA</h1>
+    </div>
+</div>
+
+@if (isLoadingAccess)
+{
+    <div class="status-panel">Cargando permisos...</div>
+}
+else if (!hasAccess)
+{
+    <section class="ai-advisor-shell">
+        <div class="ai-empty-state">
+            <h2>Asistente IA no disponible</h2>
+            <p>Esta función pertenece al plan Pro o al add-on de AI Advisor.</p>
+        </div>
+    </section>
+}
+else
+{
+    <section class="ai-advisor-shell">
+        <aside class="ai-advisor-context">
+            <h2>Pregúntale a Fidelis</h2>
+            <p>
+                Puedes preguntar por saldos en libros, ingresos, gastos, reportes o cómo usar los módulos.
+            </p>
+
+            <div class="ai-suggestion-list">
+                @foreach (var suggestion in suggestions)
+                {
+                    <button type="button" @onclick="() => UseSuggestion(suggestion)">@suggestion</button>
+                }
+            </div>
+
+            <div class="ai-provider-note">
+                <strong>Estado actual</strong>
+                <span>Conectado a OpenAI cuando exista `OpenAI:ApiKey` o `OPENAI_API_KEY`. Usa datos internos de Fidelis como contexto financiero.</span>
+            </div>
+        </aside>
+
+        <section class="ai-chat-panel">
+            <div class="ai-chat-window">
+                @if (messages.Count == 0)
+                {
+                    <div class="ai-empty-state">
+                        <h2>Haz una pregunta financiera</h2>
+                        <p>Ejemplo: “¿Cuál es el balance en libros por cuenta?” o “Resume el Profit and Loss de este año”.</p>
+                    </div>
+                }
+                else
+                {
+                    @foreach (var message in messages)
+                    {
+                        <article class="ai-message @message.Role">
+                            <span>@(message.Role == "user" ? "Tú" : "Fidelis IA")</span>
+                            <p>@message.Text</p>
+
+                            @if (message.Citations.Count > 0)
+                            {
+                                <div class="ai-citations">
+                                    @foreach (var citation in message.Citations)
+                                    {
+                                        <small>@citation.Source · @citation.Label @citation.Reference</small>
+                                    }
+                                </div>
+                            }
+                        </article>
+                    }
+                }
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(statusMessage))
+            {
+                <div class="alert @statusCss" role="alert">@statusMessage</div>
+            }
+
+            <EditForm Model="questionModel" OnValidSubmit="AskAsync" class="ai-question-form">
+                <div class="ai-period-row">
+                    <div class="field">
+                        <label>Desde</label>
+                        <InputDate class="form-control" @bind-Value="questionModel.StartDate" />
+                    </div>
+                    <div class="field">
+                        <label>Hasta</label>
+                        <InputDate class="form-control" @bind-Value="questionModel.EndDate" />
+                    </div>
+                </div>
+
+                <div class="ai-input-row">
+                    <InputTextArea class="form-control" @bind-Value="questionModel.Question" rows="3" placeholder="Escribe tu pregunta..." />
+                    <button class="btn btn-primary" type="submit" disabled="@isAsking">
+                        @(isAsking ? "Analizando..." : "Preguntar")
+                    </button>
+                </div>
+            </EditForm>
+        </section>
+    </section>
+}
+
+@code {
+    private readonly List<AiChatMessage> messages = [];
+    private readonly string[] suggestions =
+    [
+        "¿Cuál es el balance en libros por cuenta?",
+        "Resume el Profit and Loss de este año",
+        "¿Cómo funciona el módulo de depósitos?",
+        "¿Qué significa saldo en libros Fidelis?"
+    ];
+
+    private AiQuestionForm questionModel = new()
+    {
+        StartDate = new DateTime(DateTime.Today.Year, 1, 1),
+        EndDate = DateTime.Today
+    };
+
+    private bool isLoadingAccess = true;
+    private bool hasAccess;
+    private bool isAsking;
+    private string? statusMessage;
+    private string statusCss = "alert-info";
+    private int tenantId = 1;
+    private int userId = 1;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        hasAccess =
+            await SubscriptionService.HasFeatureAsync(authState.User, CfsFeatures.AiAssistantBasic) ||
+            await SubscriptionService.HasFeatureAsync(authState.User, CfsFeatures.AiAdvisor);
+
+        tenantId = int.TryParse(authState.User.FindFirst("TenantId")?.Value, out var parsedTenantId) ? parsedTenantId : 1;
+        userId = int.TryParse(authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var parsedUserId) ? parsedUserId : 1;
+        isLoadingAccess = false;
+    }
+
+    private void UseSuggestion(string suggestion)
+    {
+        questionModel.Question = suggestion;
+    }
+
+    private async Task AskAsync()
+    {
+        if (string.IsNullOrWhiteSpace(questionModel.Question))
+        {
+            statusMessage = "Escribe una pregunta para el asistente.";
+            statusCss = "alert-warning";
+            return;
+        }
+
+        isAsking = true;
+        statusMessage = null;
+
+        try
+        {
+            var question = questionModel.Question.Trim();
+            messages.Add(new AiChatMessage("user", question, []));
+
+            var answer = await AiAdvisorService.AskAsync(new AiQuestionRequest(
+                tenantId,
+                userId,
+                question,
+                questionModel.StartDate,
+                questionModel.EndDate));
+
+            messages.Add(new AiChatMessage("assistant", answer.Answer, answer.Citations));
+
+            if (answer.FollowUpQuestions.Count > 0)
+            {
+                questionModel.Question = answer.FollowUpQuestions[0];
+            }
+            else
+            {
+                questionModel.Question = string.Empty;
+            }
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"No se pudo consultar el asistente: {ex.Message}";
+            statusCss = "alert-danger";
+        }
+        finally
+        {
+            isAsking = false;
+        }
+    }
+
+    private sealed class AiQuestionForm
+    {
+        public string Question { get; set; } = string.Empty;
+        public DateTime? StartDate { get; set; }
+        public DateTime? EndDate { get; set; }
+    }
+
+    private sealed record AiChatMessage(string Role, string Text, IReadOnlyList<AiCitation> Citations);
+}

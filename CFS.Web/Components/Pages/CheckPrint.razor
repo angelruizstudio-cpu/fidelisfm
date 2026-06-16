@@ -1,0 +1,119 @@
+@page "/cheques/{Id:int}/imprimir"
+@layout PrintLayout
+@inject ICheckRepository CheckRepository
+@inject ICheckPrintSettingsRepository SettingsRepository
+
+<PageTitle>Fidelis Cheque @Id</PageTitle>
+
+@if (isLoading)
+{
+    <div class="status-panel">Cargando cheque...</div>
+}
+else if (!string.IsNullOrWhiteSpace(errorMessage))
+{
+    <div class="alert alert-danger">@errorMessage</div>
+}
+else if (check is not null)
+{
+    <div class="print-toolbar">
+        <a class="btn btn-outline-secondary" href="egresos">Volver</a>
+        <button class="btn btn-primary" type="button" onclick="window.print()">Imprimir</button>
+        <span>Usar escala 100% / Actual size.</span>
+    </div>
+
+    <section class="voucher-sheet" style="@OffsetStyle">
+        <div class="voucher-check">
+            <span class="vc-date">@check.CheckDate.ToString("MM/dd/yyyy")</span>
+            <span class="vc-payee">@check.Payee</span>
+            <span class="vc-amount">**@check.Amount.ToString("N2")</span>
+            <span class="vc-words">@PaddedWords</span>
+            <span class="vc-address">@AddressBlock</span>
+            <span class="vc-memo">@check.Memo</span>
+        </div>
+
+        <div class="voucher-stub stub-one">
+            <span class="stub-title">Voucher Section Info</span>
+            <span class="stub-payee">@check.Payee</span>
+            <span class="stub-date">@check.CheckDate.ToString("MM/dd/yyyy")</span>
+            <span class="stub-account">@check.AccountName</span>
+            <span class="stub-memo">@check.Memo</span>
+            <span class="stub-amount">@check.Amount.ToString("N2")</span>
+        </div>
+
+        <div class="voucher-stub stub-two">
+            <span class="stub-title">Voucher Section Info</span>
+            <span class="stub-payee">@check.Payee</span>
+            <span class="stub-date">@check.CheckDate.ToString("MM/dd/yyyy")</span>
+            <span class="stub-account">@check.AccountName</span>
+            <span class="stub-memo">@check.Memo</span>
+            <span class="stub-amount">@check.Amount.ToString("N2")</span>
+        </div>
+    </section>
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private CheckVoucher? check;
+    private CheckPrintSettings settings = CheckPrintSettings.Defaults();
+    private string? errorMessage;
+    private bool isLoading = true;
+
+    private string OffsetStyle => string.Join(" ", new[]
+    {
+        Var("voucher-offset-x", settings.SheetOffsetX),
+        Var("voucher-offset-y", settings.SheetOffsetY),
+        Var("check-date-left", settings.DateLeft),
+        Var("check-date-top", settings.DateTop),
+        Var("check-payee-left", settings.PayeeLeft),
+        Var("check-payee-top", settings.PayeeTop),
+        Var("check-amount-left", settings.AmountLeft),
+        Var("check-amount-top", settings.AmountTop),
+        Var("check-words-left", settings.WordsLeft),
+        Var("check-words-top", settings.WordsTop),
+        Var("check-address-left", settings.AddressLeft),
+        Var("check-address-top", settings.AddressTop),
+        Var("check-memo-left", settings.MemoLeft),
+        Var("check-memo-top", settings.MemoTop),
+        Var("stub-title-left", settings.StubTitleLeft),
+        Var("stub-title-top", settings.StubTitleTop),
+        Var("stub-payee-left", settings.StubPayeeLeft),
+        Var("stub-payee-top", settings.StubPayeeTop),
+        Var("stub-date-left", settings.StubDateLeft),
+        Var("stub-date-top", settings.StubDateTop),
+        Var("stub-account-left", settings.StubAccountLeft),
+        Var("stub-account-top", settings.StubAccountTop),
+        Var("stub-memo-left", settings.StubMemoLeft),
+        Var("stub-memo-top", settings.StubMemoTop),
+        Var("stub-amount-left", settings.StubAmountLeft),
+        Var("stub-amount-top", settings.StubAmountTop)
+    });
+    private string AddressBlock => string.IsNullOrWhiteSpace(check?.PayeeAddress) ? check?.Payee ?? string.Empty : check.PayeeAddress;
+    private string PaddedWords => check is null ? string.Empty : $"{check.AmountInWords} ".PadRight(110, '*');
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            settings = await SettingsRepository.GetAsync();
+            check = await CheckRepository.GetByIdAsync(Id);
+            if (check is null)
+            {
+                errorMessage = "No se encontro el cheque solicitado.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message.Contains("CFS_Cheques", StringComparison.OrdinalIgnoreCase)
+                ? "Falta crear la tabla dbo.CFS_Cheques. Usa el script CFS.Data/Sql/CFS_Cheques.sql."
+                : ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private static string Var(string name, decimal value) => $"--{name}: {value:0.##}pt;";
+}

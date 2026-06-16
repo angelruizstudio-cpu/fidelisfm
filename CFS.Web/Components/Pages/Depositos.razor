@@ -1,0 +1,355 @@
+@page "/depositos"
+@rendermode InteractiveServer
+@inject IDepositRepository DepositRepository
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<PageTitle>Fidelis Depósitos</PageTitle>
+
+<div class="screen-header">
+    <div>
+        <p class="eyebrow">Banco</p>
+        <h1>Depósitos</h1>
+    </div>
+    <div class="quick-actions">
+        <button class="btn btn-primary" @onclick="SelectAllPending" disabled="@(!pendingCandidates.Any())">Seleccionar pendientes</button>
+        <button class="btn btn-outline-secondary" @onclick="LoadAsync" disabled="@isLoading">Actualizar</button>
+    </div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(statusMessage))
+{
+    <div class="alert @statusCss" role="alert">@statusMessage</div>
+}
+
+@if (isLoading)
+{
+    <div class="status-panel">Cargando depósitos...</div>
+}
+else
+{
+    <section class="deposit-workspace">
+        <section class="deposit-builder">
+            <div class="panel-heading">
+                <div>
+                    <h2>Preparar depósito</h2>
+                    <span>@SelectedCount ingreso(s) seleccionados • @Money(ExpectedTotal)</span>
+                </div>
+            </div>
+
+            <div class="deposit-form">
+                <div class="receipt-grid">
+                    <div class="field">
+                        <label>Cuenta bancaria</label>
+                        <InputSelect class="form-select" @bind-Value="entry.AccountId">
+                            <option value="0">Seleccionar</option>
+                            @foreach (var account in lookups.Accounts)
+                            {
+                                <option value="@account.Id">@account.Name</option>
+                            }
+                        </InputSelect>
+                    </div>
+
+                    <div class="field">
+                        <label>Fecha del depósito</label>
+                        <InputDate class="form-control" @bind-Value="entry.DepositDate" />
+                    </div>
+
+                    <div class="field amount-field">
+                        <label>Total esperado</label>
+                        <input class="form-control" value="@Money(ExpectedTotal)" readonly />
+                    </div>
+
+                    <div class="field amount-field">
+                        <label>Total real</label>
+                        <InputNumber class="form-control" @bind-Value="entry.ActualTotal" />
+                    </div>
+
+                    <div class="field span-2">
+                        <label>Notas</label>
+                        <InputTextArea class="form-control" rows="2" @bind-Value="entry.Notes" />
+                    </div>
+                </div>
+
+                <div class="@DepositHintClass">
+                    <strong>@DepositHintTitle</strong>
+                    <span>@DepositHintText</span>
+                </div>
+
+                <div class="form-actions">
+                    <button class="btn btn-primary" @onclick="CreateDepositAsync" disabled="@(isSaving || SelectedCount == 0)">
+                        @(isSaving ? "Registrando..." : "Registrar depósito")
+                    </button>
+                    <button class="btn btn-outline-secondary" @onclick="ClearSelection">Limpiar selección</button>
+                </div>
+            </div>
+
+            <div class="table-responsive deposit-table">
+                <table class="table align-middle">
+                    <thead>
+                        <tr>
+                            <th></th>
+                            <th>Fecha</th>
+                            <th>Origen</th>
+                            <th>Método</th>
+                            <th class="text-end">Monto</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in pendingCandidates)
+                        {
+                            <tr class="@(selectedIds.Contains(item.TransactionId) ? "selected-row" : "")">
+                                <td>
+                                    <input class="form-check-input" type="checkbox" checked="@selectedIds.Contains(item.TransactionId)" @onchange="args => ToggleSelection(item.TransactionId, args)" />
+                                </td>
+                                <td>@item.Date.ToString("MM/dd/yyyy")</td>
+                                <td>
+                                    <strong>@DisplaySource(item)</strong>
+                                    <small>@item.SubcategoryName</small>
+                                </td>
+                                <td>
+                                    @item.PaymentMethod
+                                    @if (!string.IsNullOrWhiteSpace(item.CheckNumber))
+                                    {
+                                        <small>#@item.CheckNumber</small>
+                                    }
+                                </td>
+                                <td class="text-end">@Money(item.Amount)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <aside class="deposit-history">
+            <div class="panel-heading">
+                <div>
+                    <h2>Historial reciente</h2>
+                    <span>@recentDeposits.Count depósito(s)</span>
+                </div>
+            </div>
+
+            <div class="deposit-history-list">
+                @foreach (var deposit in recentDeposits)
+                {
+                    <div class="deposit-history-row">
+                        <div>
+                            <strong>@deposit.DepositDate.ToString("MM/dd/yyyy")</strong>
+                            <small>@deposit.AccountName • @deposit.ItemCount ingreso(s)</small>
+                        </div>
+                        <div class="row-side">
+                            <strong>@Money(deposit.ActualTotal)</strong>
+                            <span class="@StatusBadgeClass(deposit.Status)">@deposit.Status</span>
+                            @if (deposit.Status == "Registrado")
+                            {
+                                <button class="btn btn-outline-danger btn-sm" type="button" @onclick="() => AskVoid(deposit)">Anular</button>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        </aside>
+    </section>
+}
+
+@if (showVoidDialog && depositToVoid is not null)
+{
+    <div class="modal-backdrop-lite">
+        <div class="void-dialog">
+            <h2>Anular depósito #@depositToVoid.Id</h2>
+            <p>Esta acción libera los ingresos incluidos y resta el monto del saldo bancario.</p>
+            <label>Motivo</label>
+            <InputTextArea class="form-control" @bind-Value="voidReason" rows="3" />
+            <div class="form-actions">
+                <button class="btn btn-outline-secondary" @onclick="CancelVoid">Cancelar</button>
+                <button class="btn btn-outline-danger" @onclick="VoidDepositAsync">Anular depósito</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private DepositLookups lookups = new([]);
+    private IReadOnlyList<DepositCandidate> pendingCandidates = [];
+    private IReadOnlyList<DepositSummary> recentDeposits = [];
+    private DepositEntry entry = new();
+    private HashSet<int> selectedIds = [];
+    private string? statusMessage;
+    private string statusCss = "alert-info";
+    private string voidReason = string.Empty;
+    private DepositSummary? depositToVoid;
+    private bool isLoading = true;
+    private bool isSaving;
+    private bool showVoidDialog;
+
+    private decimal ExpectedTotal => pendingCandidates.Where(i => selectedIds.Contains(i.TransactionId)).Sum(i => i.Amount);
+    private int SelectedCount => selectedIds.Count;
+    private bool TotalsMatch => ExpectedTotal > 0 && ExpectedTotal == entry.ActualTotal;
+    private string DepositHintClass => TotalsMatch ? "deposit-hint bank" : "deposit-hint pending";
+    private string DepositHintTitle => TotalsMatch ? "Cuadrado." : "Pendiente de cuadrar.";
+    private string DepositHintText => TotalsMatch
+        ? "El total real coincide con los ingresos seleccionados."
+        : "El total real debe coincidir antes de registrar el depósito.";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+        statusMessage = null;
+
+        try
+        {
+            lookups = await DepositRepository.GetLookupsAsync();
+            pendingCandidates = await DepositRepository.GetPendingCandidatesAsync();
+            recentDeposits = await DepositRepository.GetRecentAsync();
+
+            if (entry.AccountId <= 0)
+            {
+                entry.AccountId = lookups.Accounts.FirstOrDefault(a => a.Name.Contains("Checking", StringComparison.OrdinalIgnoreCase))?.Id
+                    ?? lookups.Accounts.FirstOrDefault()?.Id
+                    ?? 0;
+            }
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"No se pudieron cargar depósitos: {FriendlyDatabaseMessage(ex)}", "alert-danger");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void ToggleSelection(int transactionId, ChangeEventArgs args)
+    {
+        if (args.Value is bool isChecked && isChecked)
+        {
+            selectedIds.Add(transactionId);
+        }
+        else
+        {
+            selectedIds.Remove(transactionId);
+        }
+
+        entry.TransactionIds = selectedIds.ToList();
+        entry.ActualTotal = ExpectedTotal;
+    }
+
+    private void SelectAllPending()
+    {
+        selectedIds = pendingCandidates.Select(i => i.TransactionId).ToHashSet();
+        entry.TransactionIds = selectedIds.ToList();
+        entry.ActualTotal = ExpectedTotal;
+    }
+
+    private void ClearSelection()
+    {
+        selectedIds.Clear();
+        entry.TransactionIds.Clear();
+        entry.ActualTotal = 0;
+    }
+
+    private async Task CreateDepositAsync()
+    {
+        isSaving = true;
+
+        try
+        {
+            entry.TransactionIds = selectedIds.ToList();
+            var result = await DepositRepository.CreateAsync(entry, await GetCurrentUserNameAsync());
+            if (!result.Saved)
+            {
+                SetStatus(result.ErrorMessage ?? "No se pudo registrar el depósito.", "alert-danger");
+                return;
+            }
+
+            SetStatus($"Depósito #{result.DepositId} registrado correctamente.", "alert-success");
+            selectedIds.Clear();
+            entry = new DepositEntry
+            {
+                DepositDate = DateTime.Today,
+                AccountId = lookups.Accounts.FirstOrDefault(a => a.Name.Contains("Checking", StringComparison.OrdinalIgnoreCase))?.Id
+                    ?? lookups.Accounts.FirstOrDefault()?.Id
+                    ?? 0
+            };
+            await LoadAsync();
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void AskVoid(DepositSummary deposit)
+    {
+        depositToVoid = deposit;
+        voidReason = string.Empty;
+        showVoidDialog = true;
+    }
+
+    private void CancelVoid()
+    {
+        depositToVoid = null;
+        voidReason = string.Empty;
+        showVoidDialog = false;
+    }
+
+    private async Task VoidDepositAsync()
+    {
+        if (depositToVoid is null)
+        {
+            return;
+        }
+
+        var result = await DepositRepository.VoidAsync(depositToVoid.Id, voidReason, await GetCurrentUserNameAsync());
+        showVoidDialog = false;
+        depositToVoid = null;
+        voidReason = string.Empty;
+
+        if (!result.Saved)
+        {
+            SetStatus(result.ErrorMessage ?? "No se pudo anular el depósito.", "alert-danger");
+            return;
+        }
+
+        SetStatus("Depósito anulado correctamente.", "alert-success");
+        await LoadAsync();
+    }
+
+    private async Task<string> GetCurrentUserNameAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return authState.User.Identity?.Name ?? "CFS.Web";
+    }
+
+    private void SetStatus(string message, string css)
+    {
+        statusMessage = message;
+        statusCss = css;
+    }
+
+    private static string DisplaySource(DepositCandidate item) =>
+        string.IsNullOrWhiteSpace(item.MemberName) ? item.Description : item.MemberName;
+
+    private static string StatusBadgeClass(string status) => status switch
+    {
+        "Anulado" => "badge-soft danger",
+        "Conciliado" => "badge-soft",
+        _ => "badge-soft success"
+    };
+
+    private static string FriendlyDatabaseMessage(Exception ex)
+    {
+        var message = ex.Message;
+        return message.Contains("CFS_Depositos", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("CFS_DepositoItems", StringComparison.OrdinalIgnoreCase)
+            ? "La pantalla estaba intentando usar tablas nuevas. Debe trabajar contra dbo.Depositos y Transacciones.ID_Deposito_FK."
+            : message;
+    }
+
+    private static string Money(decimal value) => value.ToString("C2");
+}

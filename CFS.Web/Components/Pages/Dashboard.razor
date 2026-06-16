@@ -1,0 +1,136 @@
+@page "/dashboard"
+@rendermode InteractiveServer
+@inject IDashboardRepository DashboardRepository
+
+<PageTitle>Fidelis Dashboard</PageTitle>
+
+<div class="screen-header">
+    <div>
+        <p class="eyebrow">Fidelis Financial Management</p>
+        <h1>Dashboard financiero</h1>
+    </div>
+    <div class="quick-actions">
+        <a class="btn btn-primary" href="ingresos">Nuevo ingreso</a>
+        <a class="btn btn-outline-secondary" href="depositos">Preparar depósito</a>
+        <button class="btn btn-outline-secondary" @onclick="LoadDashboardAsync" disabled="@isLoading">
+            Actualizar
+        </button>
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <div class="status-panel">Cargando datos financieros...</div>
+}
+else if (!string.IsNullOrWhiteSpace(errorMessage))
+{
+    <div class="alert alert-warning">
+        <strong>No se pudo conectar a la base.</strong>
+        <p>@errorMessage</p>
+        <p>Configura <code>ConnectionStrings:CfsDatabase</code> para apuntar a la base actual de Fidelis.</p>
+    </div>
+}
+else if (snapshot is not null)
+{
+    <section class="metric-grid">
+        <div class="metric-card">
+            <span>Ingresos YTD</span>
+            <strong>@Money(snapshot.Summary.YearToDateIncome)</strong>
+            <small>Año fiscal actual</small>
+        </div>
+        <div class="metric-card">
+            <span>Gastos YTD</span>
+            <strong>@Money(snapshot.Summary.YearToDateExpenses)</strong>
+            <small>Incluye egresos registrados</small>
+        </div>
+        <div class="metric-card">
+            <span>Balance YTD</span>
+            <strong>@Money(snapshot.Summary.YearToDateBalance)</strong>
+            <small>Ingresos menos gastos</small>
+        </div>
+    </section>
+
+    <section class="dashboard-grid">
+        <div class="panel">
+            <div class="panel-heading">
+                <h2>Cuentas bancarias</h2>
+                <span>Actualizado @snapshot.LoadedAt.ToString("g")</span>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table align-middle">
+                    <thead>
+                        <tr>
+                            <th>Cuenta</th>
+                            <th class="text-end">Saldo en libros Fidelis</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var account in snapshot.BankAccounts)
+                        {
+                            <tr>
+                                <td>@account.Name</td>
+                                <td class="text-end">@Money(account.CurrentBalance)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <aside class="panel">
+            <div class="panel-heading">
+                <h2>Acciones rápidas</h2>
+            </div>
+            <div class="panel-body">
+                <ul class="task-list">
+                    <li>
+                        <span>Registrar diezmo u ofrenda</span>
+                        <a href="ingresos">Abrir</a>
+                    </li>
+                    <li>
+                        <span>Crear depósito bancario</span>
+                        <a href="depositos">Abrir</a>
+                    </li>
+                    <li>
+                        <span>Revisar reportes</span>
+                        <a href="reportes">Abrir</a>
+                    </li>
+                </ul>
+            </div>
+        </aside>
+    </section>
+}
+
+@code {
+    private DashboardSnapshot? snapshot;
+    private string? errorMessage;
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDashboardAsync();
+    }
+
+    private async Task LoadDashboardAsync()
+    {
+        isLoading = true;
+        errorMessage = null;
+
+        try
+        {
+            snapshot = await DashboardRepository.GetSnapshotAsync();
+        }
+        catch (Exception ex)
+        {
+            snapshot = null;
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private static string Money(decimal value) => value.ToString("C2");
+}

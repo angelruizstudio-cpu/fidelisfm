@@ -1,0 +1,82 @@
+@page "/login"
+@layout LoginLayout
+@attribute [AllowAnonymous]
+@using Microsoft.AspNetCore.Authorization
+@inject IConfiguration Configuration
+
+<PageTitle>Fidelis Login</PageTitle>
+
+<main class="login-shell">
+    <section class="login-panel">
+        <div class="login-heading">
+            <img class="login-logo" src="images/fidelis-logo.png" alt="Fidelis Financial Management" />
+            <span>Fidelis</span>
+            <h1>Financial Management</h1>
+            <p>Acceso financiero de la iglesia</p>
+        </div>
+
+        @if (DemoEnabled)
+        {
+            <div class="demo-callout">
+                <strong>Modo demo activo</strong>
+                <span>Datos ficticios para presentaciones y pruebas sin tocar la base real.</span>
+                <a class="btn btn-primary w-100" href="demo-login">Ver demo</a>
+            </div>
+        }
+
+        <form method="post" action="/login">
+            <AntiforgeryToken />
+            <input type="hidden" name="returnUrl" value="@SafeReturnUrl" />
+
+            @if (!string.IsNullOrWhiteSpace(ErrorMessage))
+            {
+                <div class="alert alert-danger" role="alert">@ErrorMessage</div>
+            }
+
+            <div class="mb-3">
+                <label class="form-label" for="userName">Usuario</label>
+                <input id="userName" name="userName" class="form-control" autocomplete="username" />
+            </div>
+
+            <div class="mb-4">
+                <label class="form-label" for="password">Contraseña</label>
+                <input id="password" name="password" type="password" class="form-control" autocomplete="current-password" />
+            </div>
+
+            <button class="btn btn-primary w-100" type="submit">Ingresar</button>
+        </form>
+    </section>
+</main>
+
+@code {
+    private bool DemoEnabled => Configuration.GetValue("Demo:Enabled", false);
+
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    public string? ReturnUrl { get; set; }
+
+    [SupplyParameterFromQuery(Name = "error")]
+    public string? Error { get; set; }
+
+    private string SafeReturnUrl => GetSafeReturnUrl(ReturnUrl);
+
+    private string? ErrorMessage => Error switch
+    {
+        "required" => "Usuario y contraseña son requeridos.",
+        "invalid" => "Credenciales inválidas.",
+        "database" => "No se pudo validar contra la base de datos.",
+        _ => null
+    };
+
+    private static string GetSafeReturnUrl(string? returnUrl)
+    {
+        if (string.IsNullOrWhiteSpace(returnUrl) || !returnUrl.StartsWith("/", StringComparison.Ordinal))
+        {
+            return "/dashboard";
+        }
+
+        return returnUrl.StartsWith("//", StringComparison.Ordinal) ||
+            returnUrl.Contains("://", StringComparison.Ordinal)
+            ? "/"
+            : returnUrl;
+    }
+}

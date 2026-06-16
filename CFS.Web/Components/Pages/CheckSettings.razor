@@ -1,0 +1,247 @@
+@page "/configuracion/cheques"
+@rendermode InteractiveServer
+@inject ICheckPrintSettingsRepository SettingsRepository
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<PageTitle>Fidelis Configuración de Cheques</PageTitle>
+
+<div class="screen-header">
+    <div>
+        <p class="eyebrow">Configuración</p>
+        <h1>Formato de cheques</h1>
+    </div>
+    <div class="quick-actions">
+        <a class="btn btn-outline-secondary" href="cheques">Volver a cheques</a>
+        <button class="btn btn-primary" @onclick="SaveAsync" disabled="@isSaving">@(isSaving ? "Guardando..." : "Guardar formato")</button>
+    </div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(statusMessage))
+{
+    <div class="alert @statusCss" role="alert">@statusMessage</div>
+}
+
+@if (isLoading)
+{
+    <div class="status-panel">Cargando configuración...</div>
+}
+else
+{
+    <section class="check-settings-layout">
+        <section class="check-settings-panel">
+            <EditForm Model="entry" OnValidSubmit="SaveAsync">
+                <DataAnnotationsValidator />
+
+                <div class="settings-group">
+                    <h2>Ajuste general</h2>
+                    <div class="settings-grid">
+                        @NumberField("Página derecha / izquierda", nameof(entry.SheetOffsetX), entry.SheetOffsetX, v => entry.SheetOffsetX = v)
+                        @NumberField("Página arriba / abajo", nameof(entry.SheetOffsetY), entry.SheetOffsetY, v => entry.SheetOffsetY = v)
+                    </div>
+                </div>
+
+                <div class="settings-group">
+                    <h2>Cheque principal</h2>
+                    <div class="settings-grid">
+                        @NumberField("Fecha izquierda", nameof(entry.DateLeft), entry.DateLeft, v => entry.DateLeft = v)
+                        @NumberField("Fecha arriba", nameof(entry.DateTop), entry.DateTop, v => entry.DateTop = v)
+                        @NumberField("Nombre izquierda", nameof(entry.PayeeLeft), entry.PayeeLeft, v => entry.PayeeLeft = v)
+                        @NumberField("Nombre arriba", nameof(entry.PayeeTop), entry.PayeeTop, v => entry.PayeeTop = v)
+                        @NumberField("Monto izquierda", nameof(entry.AmountLeft), entry.AmountLeft, v => entry.AmountLeft = v)
+                        @NumberField("Monto arriba", nameof(entry.AmountTop), entry.AmountTop, v => entry.AmountTop = v)
+                        @NumberField("Cantidad en letras izquierda", nameof(entry.WordsLeft), entry.WordsLeft, v => entry.WordsLeft = v)
+                        @NumberField("Cantidad en letras arriba", nameof(entry.WordsTop), entry.WordsTop, v => entry.WordsTop = v)
+                        @NumberField("Dirección izquierda", nameof(entry.AddressLeft), entry.AddressLeft, v => entry.AddressLeft = v)
+                        @NumberField("Dirección arriba", nameof(entry.AddressTop), entry.AddressTop, v => entry.AddressTop = v)
+                        @NumberField("Memo izquierda", nameof(entry.MemoLeft), entry.MemoLeft, v => entry.MemoLeft = v)
+                        @NumberField("Memo arriba", nameof(entry.MemoTop), entry.MemoTop, v => entry.MemoTop = v)
+                    </div>
+                </div>
+
+                <div class="settings-group">
+                    <h2>Voucher</h2>
+                    <div class="settings-grid">
+                        @NumberField("Título izquierda", nameof(entry.StubTitleLeft), entry.StubTitleLeft, v => entry.StubTitleLeft = v)
+                        @NumberField("Título arriba", nameof(entry.StubTitleTop), entry.StubTitleTop, v => entry.StubTitleTop = v)
+                        @NumberField("Beneficiario izquierda", nameof(entry.StubPayeeLeft), entry.StubPayeeLeft, v => entry.StubPayeeLeft = v)
+                        @NumberField("Beneficiario arriba", nameof(entry.StubPayeeTop), entry.StubPayeeTop, v => entry.StubPayeeTop = v)
+                        @NumberField("Fecha izquierda", nameof(entry.StubDateLeft), entry.StubDateLeft, v => entry.StubDateLeft = v)
+                        @NumberField("Fecha arriba", nameof(entry.StubDateTop), entry.StubDateTop, v => entry.StubDateTop = v)
+                        @NumberField("Cuenta izquierda", nameof(entry.StubAccountLeft), entry.StubAccountLeft, v => entry.StubAccountLeft = v)
+                        @NumberField("Cuenta arriba", nameof(entry.StubAccountTop), entry.StubAccountTop, v => entry.StubAccountTop = v)
+                        @NumberField("Memo izquierda", nameof(entry.StubMemoLeft), entry.StubMemoLeft, v => entry.StubMemoLeft = v)
+                        @NumberField("Memo arriba", nameof(entry.StubMemoTop), entry.StubMemoTop, v => entry.StubMemoTop = v)
+                        @NumberField("Monto izquierda", nameof(entry.StubAmountLeft), entry.StubAmountLeft, v => entry.StubAmountLeft = v)
+                        @NumberField("Monto arriba", nameof(entry.StubAmountTop), entry.StubAmountTop, v => entry.StubAmountTop = v)
+                    </div>
+                </div>
+
+                <div class="form-actions">
+                    <button class="btn btn-primary" type="submit" disabled="@isSaving">Guardar formato</button>
+                    <button class="btn btn-outline-secondary" type="button" @onclick="ResetDefaults">Restaurar valores por defecto</button>
+                </div>
+            </EditForm>
+        </section>
+
+        <aside class="check-preview-panel">
+            <div class="panel-heading">
+                <div>
+                    <h2>Vista previa</h2>
+                    <span>Los valores están en puntos de impresión.</span>
+                </div>
+            </div>
+            <div class="check-preview-scroll">
+                <section class="voucher-sheet check-settings-preview" style="@PreviewStyle">
+                    <div class="voucher-check">
+                        <span class="vc-date">06/15/2026</span>
+                        <span class="vc-payee">Northwest Utilities</span>
+                        <span class="vc-amount">**428.73</span>
+                        <span class="vc-words">Four Hundred Twenty-Eight and 73/100 Dollars ****************************************************************</span>
+                        <span class="vc-address">1200 Market St.
+Merrillville, IN 46410</span>
+                        <span class="vc-memo">Utilities (Utilidades)</span>
+                    </div>
+
+                    <div class="voucher-stub stub-one">
+                        <span class="stub-title">Voucher Section Info</span>
+                        <span class="stub-payee">Northwest Utilities</span>
+                        <span class="stub-date">06/15/2026</span>
+                        <span class="stub-account">Checking-6163</span>
+                        <span class="stub-memo">Utilities (Utilidades)</span>
+                        <span class="stub-amount">428.73</span>
+                    </div>
+
+                    <div class="voucher-stub stub-two">
+                        <span class="stub-title">Voucher Section Info</span>
+                        <span class="stub-payee">Northwest Utilities</span>
+                        <span class="stub-date">06/15/2026</span>
+                        <span class="stub-account">Checking-6163</span>
+                        <span class="stub-memo">Utilities (Utilidades)</span>
+                        <span class="stub-amount">428.73</span>
+                    </div>
+                </section>
+            </div>
+        </aside>
+    </section>
+}
+
+@code {
+    private CheckPrintSettingsEntry entry = CheckPrintSettingsEntry.FromSettings(CheckPrintSettings.Defaults());
+    private string? statusMessage;
+    private string statusCss = "alert-info";
+    private bool isLoading = true;
+    private bool isSaving;
+
+    private string PreviewStyle => string.Join(" ", new[]
+    {
+        Var("voucher-offset-x", entry.SheetOffsetX),
+        Var("voucher-offset-y", entry.SheetOffsetY),
+        Var("check-date-left", entry.DateLeft),
+        Var("check-date-top", entry.DateTop),
+        Var("check-payee-left", entry.PayeeLeft),
+        Var("check-payee-top", entry.PayeeTop),
+        Var("check-amount-left", entry.AmountLeft),
+        Var("check-amount-top", entry.AmountTop),
+        Var("check-words-left", entry.WordsLeft),
+        Var("check-words-top", entry.WordsTop),
+        Var("check-address-left", entry.AddressLeft),
+        Var("check-address-top", entry.AddressTop),
+        Var("check-memo-left", entry.MemoLeft),
+        Var("check-memo-top", entry.MemoTop),
+        Var("stub-title-left", entry.StubTitleLeft),
+        Var("stub-title-top", entry.StubTitleTop),
+        Var("stub-payee-left", entry.StubPayeeLeft),
+        Var("stub-payee-top", entry.StubPayeeTop),
+        Var("stub-date-left", entry.StubDateLeft),
+        Var("stub-date-top", entry.StubDateTop),
+        Var("stub-account-left", entry.StubAccountLeft),
+        Var("stub-account-top", entry.StubAccountTop),
+        Var("stub-memo-left", entry.StubMemoLeft),
+        Var("stub-memo-top", entry.StubMemoTop),
+        Var("stub-amount-left", entry.StubAmountLeft),
+        Var("stub-amount-top", entry.StubAmountTop)
+    });
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            entry = CheckPrintSettingsEntry.FromSettings(await SettingsRepository.GetAsync());
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"No se pudo cargar la configuración: {FriendlyDatabaseMessage(ex)}", "alert-warning");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        isSaving = true;
+        try
+        {
+            await SettingsRepository.SaveAsync(entry, await GetCurrentUserNameAsync());
+            SetStatus("Formato de cheque guardado correctamente.", "alert-success");
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"No se pudo guardar: {FriendlyDatabaseMessage(ex)}", "alert-danger");
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void ResetDefaults()
+    {
+        entry = CheckPrintSettingsEntry.FromSettings(CheckPrintSettings.Defaults());
+        SetStatus("Valores por defecto cargados. Presiona Guardar formato para aplicarlos.", "alert-info");
+    }
+
+    private async Task<string> GetCurrentUserNameAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return authState.User.Identity?.Name ?? "CFS.Web";
+    }
+
+    private void SetStatus(string message, string css)
+    {
+        statusMessage = message;
+        statusCss = css;
+    }
+
+    private static string FriendlyDatabaseMessage(Exception ex) =>
+        ex.Message.Contains("CFS_CheckPrintSettings", StringComparison.OrdinalIgnoreCase)
+            ? "Falta crear la tabla dbo.CFS_CheckPrintSettings. Usa el script CFS.Data/Sql/CFS_CheckPrintSettings.sql."
+            : ex.Message;
+
+    private static string Var(string name, decimal value) => $"--{name}: {value:0.##}pt;";
+
+    private static RenderFragment NumberField(string label, string name, decimal value, Action<decimal> setter) => builder =>
+    {
+        builder.OpenElement(0, "div");
+        builder.AddAttribute(1, "class", "field");
+        builder.OpenElement(2, "label");
+        builder.AddContent(3, label);
+        builder.CloseElement();
+        builder.OpenElement(4, "input");
+        builder.AddAttribute(5, "class", "form-control compact-control");
+        builder.AddAttribute(6, "type", "number");
+        builder.AddAttribute(7, "step", "1");
+        builder.AddAttribute(8, "name", name);
+        builder.AddAttribute(9, "value", value);
+        builder.AddAttribute(10, "onchange", EventCallback.Factory.Create<ChangeEventArgs>(new object(), args =>
+        {
+            if (decimal.TryParse(args.Value?.ToString(), out var parsed))
+            {
+                setter(parsed);
+            }
+        }));
+        builder.CloseElement();
+        builder.CloseElement();
+    };
+}

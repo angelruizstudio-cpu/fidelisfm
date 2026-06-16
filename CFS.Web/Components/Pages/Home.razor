@@ -1,0 +1,192 @@
+@page "/"
+@layout LoginLayout
+@attribute [AllowAnonymous]
+@using Microsoft.AspNetCore.Authorization
+
+<PageTitle>Fidelis Financial Management</PageTitle>
+
+<main class="public-home">
+    <header class="public-nav">
+        <a class="public-brand" href="/">
+            <img src="images/fidelis-logo.png" alt="Fidelis Financial Management" />
+            <strong>Fidelis</strong>
+        </a>
+        <nav aria-label="Navegación pública">
+            <a href="#features">Funciones</a>
+            <a href="#pricing">Planes</a>
+            <a class="public-login-link" href="login?returnUrl=%2Fdashboard">Ingresar</a>
+        </nav>
+    </header>
+
+    <section class="public-hero">
+        <div class="public-hero-copy">
+            <p class="eyebrow">Fidelis Financial Management</p>
+            <h1>Finanzas claras para iglesias que necesitan orden, reportes y confianza.</h1>
+            <p>
+                Fidelis Financial Management ayuda a registrar ingresos, depósitos, cheques, conciliaciones bancarias y reportes financieros en un solo sistema diseñado para tesorería de iglesia.
+            </p>
+            <div class="public-actions">
+                <a class="btn btn-primary" href="#pricing">Ver planes</a>
+                <a class="btn btn-outline-secondary" href="login?returnUrl=%2Fdashboard">Entrar al sistema</a>
+            </div>
+        </div>
+
+        <aside class="public-snapshot" aria-label="Resumen de Fidelis Financial Management">
+            <div>
+                <span>Reportes</span>
+                <strong>P&L por cuenta</strong>
+            </div>
+            <div>
+                <span>Banco</span>
+                <strong>Depósitos y conciliación</strong>
+            </div>
+            <div>
+                <span>AI Advisor</span>
+                <strong>Insights financieros</strong>
+            </div>
+        </aside>
+    </section>
+
+    <section class="public-section" id="features">
+        <div class="public-section-heading">
+            <p class="eyebrow">Qué incluye</p>
+            <h2>Un sistema financiero hecho alrededor del flujo real de una iglesia.</h2>
+        </div>
+
+        <div class="public-feature-grid">
+            <article>
+                <strong>Ingresos y diezmos</strong>
+                <p>Registra recibos, miembros, métodos de pago y fondos especiales sin mezclar cuentas bancarias.</p>
+            </article>
+            <article>
+                <strong>Depósitos por cuenta</strong>
+                <p>Agrupa efectivo y cheques para depositar, manteniendo cada cuenta bancaria separada.</p>
+            </article>
+            <article>
+                <strong>Cheques tipo voucher</strong>
+                <p>Prepara cheques con detalle para impresión y control interno de tesorería.</p>
+            </article>
+            <article>
+                <strong>Conciliación bancaria</strong>
+                <p>Compara el estado del banco con el saldo en libros de Fidelis y cierra periodos con control.</p>
+            </article>
+            <article>
+                <strong>Reportes financieros</strong>
+                <p>Profit and Loss, detail, balance sheet y reportes de diezmos listos para imprimir o guardar en PDF.</p>
+            </article>
+            <article>
+                <strong>Asistente IA</strong>
+                <p>Insights y preguntas financieras sobre el tenant como add-on o parte del plan avanzado.</p>
+            </article>
+        </div>
+    </section>
+
+    <section class="public-section pricing-section" id="pricing">
+        <div class="public-section-heading">
+            <p class="eyebrow">Suscripciones</p>
+            <h2>Planes pensados para el nivel de operación de cada iglesia.</h2>
+        </div>
+
+        <div class="pricing-grid">
+            @foreach (var plan in Plans)
+            {
+                <article class="pricing-card @(plan.Highlight ? "highlight" : "")">
+                    @if (plan.Highlight)
+                    {
+                        <span class="plan-badge">Recomendado</span>
+                    }
+                    <h3>@plan.Name</h3>
+                    <p>@plan.Description</p>
+                    <div class="plan-price">
+                        <strong>@plan.Price</strong>
+                        <span>@plan.Term</span>
+                    </div>
+                    <ul>
+                        @foreach (var feature in plan.Features)
+                        {
+                            <li>@feature</li>
+                        }
+                    </ul>
+                    <a class="btn @(plan.Highlight ? "btn-primary" : "btn-outline-secondary")" href="login?returnUrl=%2Fdashboard">
+                        Solicitar acceso
+                    </a>
+                </article>
+            }
+        </div>
+
+        <div class="founder-note">
+            <strong>Iglesia fundadora</strong>
+            <span>Tu congregación mantiene acceso completo sin costo como cuenta fundadora de Fidelis.</span>
+        </div>
+    </section>
+</main>
+
+@code {
+    private static readonly IReadOnlyList<PricingPlan> Plans =
+    [
+        new(
+            "Básico",
+            "$29",
+            "/mes",
+            "Registro financiero simple para iglesias que quieren empezar con orden.",
+            [
+                "Dashboard financiero",
+                "Ingresos y recibos",
+                "Depósitos básicos",
+                "Reportes básicos",
+                "Usuarios limitados"
+            ],
+            false),
+        new(
+            "Standard",
+            "$59",
+            "/mes",
+            "Operación contable completa para la tesorería diaria de una iglesia.",
+            [
+                "Todo en Básico",
+                "Egresos",
+                "Cheques tipo voucher",
+                "Conciliación bancaria",
+                "Reportes por cuenta bancaria",
+                "P&L, P&L Detail y Balance Sheet",
+                "Más usuarios"
+            ],
+            true),
+        new(
+            "Pro",
+            "$99",
+            "/mes",
+            "IA, auditoría y automatización para iglesias que quieren análisis avanzado.",
+            [
+                "Todo en Standard",
+                "Insights dinámicos",
+                "Agente IA financiero",
+                "Auditoría avanzada",
+                "Automatizaciones",
+                "Análisis de tendencias"
+            ],
+            false),
+        new(
+            "Multi-Iglesia",
+            "Custom",
+            "",
+            "Administración por organización para concilios, redes o varias sedes.",
+            [
+                "Todo en Pro",
+                "Varias iglesias bajo una organización",
+                "Dashboard consolidado",
+                "Usuarios por iglesia",
+                "Reportes por iglesia y consolidados",
+                "Administración central"
+            ],
+            false)
+    ];
+
+    private sealed record PricingPlan(
+        string Name,
+        string Price,
+        string Term,
+        string Description,
+        IReadOnlyList<string> Features,
+        bool Highlight);
+}

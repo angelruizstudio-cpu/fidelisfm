@@ -1,0 +1,331 @@
+@page "/conciliacion"
+@rendermode InteractiveServer
+@inject IReconciliationRepository ReconciliationRepository
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<PageTitle>Fidelis Conciliación</PageTitle>
+
+<div class="screen-header">
+    <div>
+        <p class="eyebrow">Banco</p>
+        <h1>Conciliación bancaria</h1>
+    </div>
+    <div class="quick-actions">
+        <button class="btn btn-primary" @onclick="LoadWorkspaceAsync" disabled="@isLoading">Actualizar</button>
+    </div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(statusMessage))
+{
+    <div class="alert @statusCss" role="alert">@statusMessage</div>
+}
+
+@if (isLoading)
+{
+    <div class="status-panel">Cargando conciliación...</div>
+}
+else
+{
+    <section class="reconcile-workspace">
+        <section class="reconcile-main">
+            <div class="panel-heading">
+                <div>
+                    <h2>@SelectedAccountName</h2>
+                    <span>@LastStatementText</span>
+                </div>
+            </div>
+
+            <div class="deposit-form">
+                <div class="receipt-grid">
+                    <div class="field">
+                        <label>Cuenta bancaria</label>
+                        <InputSelect class="form-select" @bind-Value="entry.AccountId" @bind-Value:after="LoadWorkspaceAsync">
+                            @foreach (var account in lookups.Accounts)
+                            {
+                                <option value="@account.Id">@account.Name</option>
+                            }
+                        </InputSelect>
+                    </div>
+
+                    <div class="field">
+                        <label>Fecha final del estado</label>
+                        <InputDate class="form-control" @bind-Value="entry.StatementDate" @bind-Value:after="LoadWorkspaceAsync" />
+                    </div>
+
+                    <div class="field amount-field">
+                        <label>Beginning balance</label>
+                        <input class="form-control" value="@Money(workspace.BeginningBalance)" readonly />
+                    </div>
+
+                    <div class="field amount-field">
+                        <label>Statement ending balance</label>
+                        <InputNumber class="form-control" @bind-Value="entry.StatementBalance" />
+                    </div>
+                </div>
+
+                <section class="reconcile-metrics">
+                    <div>
+                        <span>Statement ending balance</span>
+                        <strong>@Money(entry.StatementBalance)</strong>
+                    </div>
+                    <div>
+                        <span>Cleared balance</span>
+                        <strong>@Money(ClearedBalance)</strong>
+                    </div>
+                    <div class="@(Difference == 0 ? "ok" : "warn")">
+                        <span>Difference</span>
+                        <strong>@Money(Difference)</strong>
+                    </div>
+                    <div>
+                        <span>Beginning balance</span>
+                        <strong>@Money(workspace.BeginningBalance)</strong>
+                    </div>
+                    <div>
+                        <span>Payments</span>
+                        <strong>@Money(PaymentsTotal)</strong>
+                    </div>
+                    <div>
+                        <span>Deposits</span>
+                        <strong>@Money(DepositsTotal)</strong>
+                    </div>
+                </section>
+
+                <div class="@ReconcileHintClass">
+                    <strong>@ReconcileHintTitle</strong>
+                    <span>@ReconcileHintText</span>
+                </div>
+
+                <div class="form-actions">
+                    <button class="btn btn-primary" @onclick="CloseAsync" disabled="@(Difference != 0 || SelectedCount == 0 || isSaving)">
+                        @(isSaving ? "Cerrando..." : "Cerrar conciliación")
+                    </button>
+                    <button class="btn btn-outline-secondary" @onclick="ClearSelection">Limpiar selección</button>
+                </div>
+            </div>
+
+            <div class="reconcile-list">
+                <div class="reconcile-section-title">
+                    <h3>Depósitos pendientes</h3>
+                    <span>@workspace.Deposits.Count</span>
+                </div>
+                @foreach (var item in workspace.Deposits)
+                {
+                    <label class="reconcile-row">
+                        <input class="form-check-input" type="checkbox" checked="@selectedDeposits.Contains(item.Id)" @onchange="args => ToggleDeposit(item.Id, args)" />
+                        <span>
+                            <strong>@item.Description</strong>
+                            <small>@item.Date.ToString("MM/dd/yyyy") • Ref. @item.Reference</small>
+                        </span>
+                        <strong>@Money(item.Amount)</strong>
+                    </label>
+                }
+
+                <div class="reconcile-section-title">
+                    <h3>Pagos pendientes</h3>
+                    <span>@PendingPayments.Count</span>
+                </div>
+                @foreach (var item in PendingPayments)
+                {
+                    <label class="reconcile-row">
+                        <input class="form-check-input" type="checkbox" checked="@selectedTransactions.Contains(item.Id)" @onchange="args => ToggleTransaction(item.Id, args)" />
+                        <span>
+                            <strong>@item.Description</strong>
+                            <small>@item.Date.ToString("MM/dd/yyyy") • @item.Source • Ref. @item.Reference</small>
+                        </span>
+                        <strong>@Money(item.Amount)</strong>
+                    </label>
+                }
+
+                <div class="reconcile-section-title">
+                    <h3>Depósitos directos pendientes</h3>
+                    <span>@PendingDirectDeposits.Count</span>
+                </div>
+                @foreach (var item in PendingDirectDeposits)
+                {
+                    <label class="reconcile-row">
+                        <input class="form-check-input" type="checkbox" checked="@selectedTransactions.Contains(item.Id)" @onchange="args => ToggleTransaction(item.Id, args)" />
+                        <span>
+                            <strong>@item.Description</strong>
+                            <small>@item.Date.ToString("MM/dd/yyyy") • @item.Source • Ref. @item.Reference</small>
+                        </span>
+                        <strong>@Money(item.Amount)</strong>
+                    </label>
+                }
+            </div>
+        </section>
+
+        <aside class="deposit-history">
+            <div class="panel-heading">
+                <div>
+                    <h2>Conciliaciones</h2>
+                    <span>@workspace.Recent.Count cierre(s)</span>
+                </div>
+            </div>
+
+            <div class="deposit-history-list">
+                @foreach (var item in workspace.Recent)
+                {
+                    <div class="deposit-history-row">
+                        <div>
+                            <strong>@item.ReconciliationDate.ToString("MM/dd/yyyy")</strong>
+                            <small>@item.AccountName</small>
+                        </div>
+                        <div class="row-side">
+                            <strong>@Money(item.StatementBalance)</strong>
+                            <span class="badge-soft success">Cerrada</span>
+                        </div>
+                    </div>
+                }
+            </div>
+        </aside>
+    </section>
+}
+
+@code {
+    private ReconciliationLookups lookups = new([]);
+    private ReconciliationWorkspace workspace = new(0, null, [], [], []);
+    private ReconciliationEntry entry = new();
+    private HashSet<int> selectedDeposits = [];
+    private HashSet<int> selectedTransactions = [];
+    private string? statusMessage;
+    private string statusCss = "alert-info";
+    private bool isLoading = true;
+    private bool isSaving;
+
+    private string SelectedAccountName => lookups.Accounts.FirstOrDefault(a => a.Id == entry.AccountId)?.Name ?? "Selecciona una cuenta";
+    private string LastStatementText => workspace.LastStatementDate.HasValue
+        ? $"Último cierre: {workspace.LastStatementDate.Value:MM/dd/yyyy}"
+        : "Primer cierre: usando saldo inicial";
+    private IReadOnlyList<ReconciliationCandidate> PendingPayments =>
+        workspace.Transactions.Where(t => t.Amount < 0).ToList();
+    private IReadOnlyList<ReconciliationCandidate> PendingDirectDeposits =>
+        workspace.Transactions.Where(t => t.Amount > 0).ToList();
+    private int SelectedCount => selectedDeposits.Count + selectedTransactions.Count;
+    private decimal PaymentsTotal => Math.Abs(workspace.Transactions
+        .Where(t => selectedTransactions.Contains(t.Id) && t.Amount < 0)
+        .Sum(t => t.Amount));
+    private decimal DepositsTotal =>
+        workspace.Deposits.Where(d => selectedDeposits.Contains(d.Id)).Sum(d => d.Amount) +
+        workspace.Transactions.Where(t => selectedTransactions.Contains(t.Id) && t.Amount > 0).Sum(t => t.Amount);
+    private decimal ClearedBalance => workspace.BeginningBalance - PaymentsTotal + DepositsTotal;
+    private decimal Difference => entry.StatementBalance - ClearedBalance;
+    private string ReconcileHintClass => Difference == 0 ? "deposit-hint bank" : "deposit-hint pending";
+    private string ReconcileHintTitle => Difference == 0 ? "Conciliación cuadrada." : "Diferencia pendiente.";
+    private string ReconcileHintText => Difference == 0
+        ? "Puedes cerrar la conciliación con las partidas seleccionadas."
+        : "Selecciona pagos y depósitos hasta que el balance conciliado coincida con el estado del banco.";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            lookups = await ReconciliationRepository.GetLookupsAsync();
+            entry.AccountId = lookups.Accounts.FirstOrDefault()?.Id ?? 0;
+            await LoadWorkspaceAsync();
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"No se pudo cargar conciliación: {ex.Message}", "alert-danger");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task LoadWorkspaceAsync()
+    {
+        if (entry.AccountId <= 0)
+        {
+            return;
+        }
+
+        isLoading = true;
+        selectedDeposits.Clear();
+        selectedTransactions.Clear();
+
+        try
+        {
+            workspace = await ReconciliationRepository.GetWorkspaceAsync(entry.AccountId, entry.StatementDate);
+            statusMessage = null;
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"No se pudo cargar conciliación: {ex.Message}", "alert-danger");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void ToggleDeposit(int id, ChangeEventArgs args)
+    {
+        Toggle(selectedDeposits, id, args);
+        entry.DepositIds = selectedDeposits.ToList();
+    }
+
+    private void ToggleTransaction(int id, ChangeEventArgs args)
+    {
+        Toggle(selectedTransactions, id, args);
+        entry.TransactionIds = selectedTransactions.ToList();
+    }
+
+    private static void Toggle(HashSet<int> target, int id, ChangeEventArgs args)
+    {
+        if (args.Value is bool isChecked && isChecked)
+        {
+            target.Add(id);
+        }
+        else
+        {
+            target.Remove(id);
+        }
+    }
+
+    private void ClearSelection()
+    {
+        selectedDeposits.Clear();
+        selectedTransactions.Clear();
+        entry.DepositIds.Clear();
+        entry.TransactionIds.Clear();
+    }
+
+    private async Task CloseAsync()
+    {
+        isSaving = true;
+
+        try
+        {
+            entry.DepositIds = selectedDeposits.ToList();
+            entry.TransactionIds = selectedTransactions.ToList();
+            var result = await ReconciliationRepository.CloseAsync(entry, await GetCurrentUserNameAsync());
+            if (!result.Saved)
+            {
+                SetStatus(result.ErrorMessage ?? "No se pudo cerrar la conciliación.", "alert-danger");
+                return;
+            }
+
+            SetStatus($"Conciliación #{result.ReconciliationId} cerrada correctamente.", "alert-success");
+            await LoadWorkspaceAsync();
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task<string> GetCurrentUserNameAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return authState.User.Identity?.Name ?? "CFS.Web";
+    }
+
+    private void SetStatus(string message, string css)
+    {
+        statusMessage = message;
+        statusCss = css;
+    }
+
+    private static string Money(decimal value) => value.ToString("C2");
+}

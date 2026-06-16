@@ -1,0 +1,80 @@
+﻿@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ISubscriptionService SubscriptionService
+
+<nav class="qb-nav" aria-label="Navegación principal">
+    <a class="brand" href="dashboard">
+        <img class="brand-logo" src="images/fidelis-logo.png" alt="Fidelis Financial Management" />
+        <span>Fidelis Financial Management</span>
+    </a>
+
+    <a class="create-button" href="ingresos">
+        <span aria-hidden="true">+</span>
+        Nuevo ingreso
+    </a>
+
+    <div class="nav-section">
+        @if (HasFeature(CfsFeatures.Dashboard))
+        {
+            <NavLink class="nav-link" href="dashboard">
+                <span class="nav-icon" aria-hidden="true">⌂</span>
+                Dashboard
+            </NavLink>
+        }
+        @if (HasFeature(CfsFeatures.Income))
+        {
+            <NavLink class="nav-link" href="ingresos">
+                <span class="nav-icon" aria-hidden="true">$</span>
+                Ingresos
+            </NavLink>
+        }
+        @if (HasFeature(CfsFeatures.Expenses))
+        {
+            <NavLink class="nav-link" href="egresos">
+                <span class="nav-icon" aria-hidden="true">−</span>
+                Egresos
+            </NavLink>
+            <NavLink class="nav-link" href="cheques">
+                <span class="nav-icon" aria-hidden="true">▤</span>
+                Cheques
+            </NavLink>
+            <NavLink class="nav-link" href="configuracion/cheques">
+                <span class="nav-icon" aria-hidden="true">⚙</span>
+                Formato de cheques
+            </NavLink>
+        }
+        @if (HasFeature(CfsFeatures.Deposits))
+        {
+            <NavLink class="nav-link" href="depositos">
+                <span class="nav-icon" aria-hidden="true">⇣</span>
+                Depósitos
+            </NavLink>
+        }
+        @if (HasFeature(CfsFeatures.Reconciliation))
+        {
+            <NavLink class="nav-link" href="conciliacion">
+                <span class="nav-icon" aria-hidden="true">✓</span>
+                Conciliación
+            </NavLink>
+        }
+        @if (HasFeature(CfsFeatures.ReportsBasic))
+        {
+            <NavLink class="nav-link" href="reportes">
+                <span class="nav-icon" aria-hidden="true">▥</span>
+                Reportes
+            </NavLink>
+        }
+    </div>
+</nav>
+
+@code {
+    private TenantSubscription? subscription;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        subscription = await SubscriptionService.GetCurrentAsync(authState.User);
+    }
+
+    private bool HasFeature(string featureKey) =>
+        subscription?.HasFeature(featureKey) ?? true;
+}

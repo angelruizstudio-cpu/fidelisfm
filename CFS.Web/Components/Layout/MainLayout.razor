@@ -1,0 +1,105 @@
+﻿@inherits LayoutComponentBase
+@inject IConfiguration Configuration
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ISubscriptionService SubscriptionService
+
+<div class="app-shell">
+    <aside class="sidebar">
+        <NavMenu />
+    </aside>
+
+    <main class="workspace">
+        <header class="command-bar">
+            <div class="search-box" aria-label="Buscar en Fidelis">
+                <span aria-hidden="true">⌕</span>
+                <input placeholder="Buscar persona, recibo o transacción" />
+            </div>
+
+            @if (Configuration.GetValue("Demo:Enabled", false))
+            {
+                <span class="demo-badge">Demo</span>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(EnvironmentBadge))
+            {
+                <span class="environment-badge">@EnvironmentBadge</span>
+            }
+
+            @if (subscription is not null)
+            {
+                <span class="demo-badge @(subscription.IsFounderAccount ? "founder" : "")">@subscription.PlanName</span>
+            }
+
+            <AuthorizeView>
+                <Authorized>
+                    <div class="user-area">
+                        <span>@context.User.FindFirst("FullName")?.Value</span>
+                        <a class="logout-link" href="logout">Salir</a>
+                    </div>
+                </Authorized>
+                <NotAuthorized>
+                    <span class="user-area">Fidelis</span>
+                </NotAuthorized>
+            </AuthorizeView>
+        </header>
+
+        <article class="content">
+            @Body
+        </article>
+    </main>
+
+    <CfsAiPanel />
+</div>
+
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">×</span>
+</div>
+
+@code {
+    private TenantSubscription? subscription;
+    private string? EnvironmentBadge => GetEnvironmentBadge();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        subscription = await SubscriptionService.GetCurrentAsync(authState.User);
+    }
+
+    private string? GetEnvironmentBadge()
+    {
+        var connectionString = Configuration.GetConnectionString("CfsDatabase") ?? string.Empty;
+        var databaseName = GetConnectionValue(connectionString, "Initial Catalog")
+            ?? GetConnectionValue(connectionString, "Database");
+
+        if (string.IsNullOrWhiteSpace(databaseName))
+        {
+            return null;
+        }
+
+        return databaseName.Contains("staging", StringComparison.OrdinalIgnoreCase)
+            ? "Staging"
+            : null;
+    }
+
+    private static string? GetConnectionValue(string connectionString, string key)
+    {
+        foreach (var part in connectionString.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var separator = part.IndexOf('=');
+            if (separator <= 0)
+            {
+                continue;
+            }
+
+            var partKey = part[..separator].Trim();
+            if (partKey.Equals(key, StringComparison.OrdinalIgnoreCase))
+            {
+                return part[(separator + 1)..].Trim();
+            }
+        }
+
+        return null;
+    }
+}

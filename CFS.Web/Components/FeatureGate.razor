@@ -1,0 +1,47 @@
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ISubscriptionService SubscriptionService
+
+@if (isLoading)
+{
+    <div class="status-panel">Validando acceso...</div>
+}
+else if (hasAccess)
+{
+    @ChildContent
+}
+else
+{
+    @if (DeniedContent is not null)
+    {
+        @DeniedContent
+    }
+    else
+    {
+        <div class="status-panel feature-denied">
+            <strong>Feature no incluida en el plan actual.</strong>
+            <span>Para habilitar este módulo se requiere actualizar la suscripción.</span>
+        </div>
+    }
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public string Feature { get; set; } = string.Empty;
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    [Parameter]
+    public RenderFragment? DeniedContent { get; set; }
+
+    private bool isLoading = true;
+    private bool hasAccess;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        isLoading = true;
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        hasAccess = await SubscriptionService.HasFeatureAsync(authState.User, Feature);
+        isLoading = false;
+    }
+}

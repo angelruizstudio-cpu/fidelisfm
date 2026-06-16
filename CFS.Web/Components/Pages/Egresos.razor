@@ -1,0 +1,534 @@
+@page "/egresos"
+@rendermode InteractiveServer
+@inject IExpenseRepository ExpenseRepository
+@inject ICheckRepository CheckRepository
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<PageTitle>Fidelis Egresos</PageTitle>
+
+<div class="screen-header">
+    <div>
+        <p class="eyebrow">Modulo</p>
+        <h1>Egresos</h1>
+    </div>
+    <div class="quick-actions">
+        <button class="btn btn-primary" @onclick="NewExpense">Nuevo egreso</button>
+        <a class="btn btn-outline-secondary" href="cheques">Cheques</a>
+        <button class="btn btn-outline-secondary" @onclick="LoadAsync" disabled="@isLoading">Actualizar</button>
+    </div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(statusMessage))
+{
+    <div class="alert @statusCss" role="alert">
+        @statusMessage
+        @if (showDuplicateConfirm)
+        {
+            <button class="btn btn-sm btn-outline-secondary ms-2" @onclick="SaveDuplicateAsync">Guardar de todos modos</button>
+        }
+    </div>
+}
+
+@if (isLoading)
+{
+    <div class="status-panel">Cargando egresos...</div>
+}
+else
+{
+    <section class="income-workspace">
+        <aside class="income-list-panel">
+            <div class="panel-heading">
+                <div>
+                    <h2>Gastos recientes</h2>
+                    <span>@filteredExpenses.Count egreso(s) • @Money(filteredExpenses.Where(e => !e.IsVoided).Sum(e => e.Amount))</span>
+                </div>
+            </div>
+
+            <div class="income-filter">
+                <input class="form-control" placeholder="Buscar beneficiario, categoría, método..." @bind="searchText" @bind:event="oninput" />
+                <div class="date-filter">
+                    <InputDate class="form-control compact-control" @bind-Value="startDate" />
+                    <InputDate class="form-control compact-control" @bind-Value="endDate" />
+                </div>
+                <div class="segmented-filter" role="group" aria-label="Filtrar egresos">
+                    <button class="@StatusButtonClass("active")" type="button" @onclick='() => statusFilter = "active"'>Activos</button>
+                    <button class="@StatusButtonClass("check")" type="button" @onclick='() => statusFilter = "check"'>Cheque</button>
+                    <button class="@StatusButtonClass("voided")" type="button" @onclick='() => statusFilter = "voided"'>Anulados</button>
+                    <button class="@StatusButtonClass("all")" type="button" @onclick='() => statusFilter = "all"'>Todos</button>
+                </div>
+            </div>
+
+            <div class="income-list">
+                @foreach (var expense in filteredExpenses)
+                {
+                    <button class="income-row @(selectedId == expense.Id ? "selected" : "")" @onclick="() => EditExpense(expense)">
+                        <span class="row-main">
+                            <strong>@expense.Description</strong>
+                            <small>@expense.SubcategoryName • @expense.PaymentMethod</small>
+                        </span>
+                        <span class="row-side">
+                            <strong>@Money(expense.Amount)</strong>
+                            <small>@expense.Date.ToString("MM/dd/yyyy")</small>
+                        </span>
+                        <span class="row-badges">
+                            @if (expense.IsVoided)
+                            {
+                                <span class="badge-soft danger">Anulado</span>
+                            }
+                            else if (expense.IsReconciled)
+                            {
+                                <span class="badge-soft success">Conciliado</span>
+                            }
+                            else
+                            {
+                                <span class="badge-soft">Registrado</span>
+                            }
+                        </span>
+                    </button>
+                }
+            </div>
+        </aside>
+
+        <section class="receipt-panel">
+            <EditForm Model="entry" OnValidSubmit="SaveAsync">
+                <DataAnnotationsValidator />
+
+                <div class="receipt-topline">
+                    <div>
+                        <p class="eyebrow">@FormModeLabel</p>
+                        <h2>@(entry.Id > 0 ? $"Egreso #{entry.Id}" : "Nuevo egreso")</h2>
+                    </div>
+                    <div class="receipt-amount">
+                        <span>Total</span>
+                        <strong>@Money(entry.Amount)</strong>
+                    </div>
+                </div>
+
+                <div class="receipt-grid">
+                    <div class="field">
+                        <label>Cuenta bancaria</label>
+                        <InputSelect class="form-select" @bind-Value="entry.AccountId" disabled="@(!CanEditForm)">
+                            <option value="0">Seleccionar</option>
+                            @foreach (var account in lookups.Accounts)
+                            {
+                                <option value="@account.Id">@account.Name</option>
+                            }
+                        </InputSelect>
+                        <ValidationMessage For="() => entry.AccountId" />
+                    </div>
+
+                    <div class="field">
+                        <label>Fecha</label>
+                        <InputDate class="form-control" @bind-Value="entry.Date" disabled="@(!CanEditForm)" />
+                        <ValidationMessage For="() => entry.Date" />
+                    </div>
+
+                    <div class="field span-2">
+                        <label>Subcategoría de gasto</label>
+                        <InputSelect class="form-select" @bind-Value="entry.SubcategoryId" disabled="@(!CanEditForm)">
+                            <option value="0">Seleccionar</option>
+                            @foreach (var subcategory in lookups.Subcategories)
+                            {
+                                <option value="@subcategory.Id">@subcategory.Name</option>
+                            }
+                        </InputSelect>
+                        <ValidationMessage For="() => entry.SubcategoryId" />
+                    </div>
+
+                    <div class="field">
+                        <label>Método de pago</label>
+                        <InputSelect class="form-select" @bind-Value="entry.PaymentMethod" disabled="@(!CanEditForm)">
+                            @foreach (var method in lookups.PaymentMethods)
+                            {
+                                <option value="@method">@method</option>
+                            }
+                        </InputSelect>
+                        <ValidationMessage For="() => entry.PaymentMethod" />
+                    </div>
+
+                    <div class="field">
+                        <label>Número de cheque</label>
+                        <InputText class="form-control" @bind-Value="entry.CheckNumber" disabled="@(!CanEditForm || !UsesCheck)" />
+                        <ValidationMessage For="() => entry.CheckNumber" />
+                    </div>
+
+                    <div class="field amount-field">
+                        <label>Monto</label>
+                        <InputNumber class="form-control" @bind-Value="entry.Amount" disabled="@(!CanEditForm)" />
+                        <ValidationMessage For="() => entry.Amount" />
+                    </div>
+
+                    <div class="field span-2">
+                        <label>Beneficiario / descripción</label>
+                        <InputTextArea class="form-control" @bind-Value="entry.Description" rows="3" disabled="@(!CanEditForm)" />
+                        <ValidationMessage For="() => entry.Description" />
+                    </div>
+                </div>
+
+                @if (UsesCheck)
+                {
+                    <div class="deposit-hint route">
+                        <strong>Pago por cheque.</strong>
+                        <span>Al guardar, Fidelis preguntará si este cheque debe prepararse para imprimir.</span>
+                    </div>
+                }
+                else
+                {
+                    <div class="deposit-hint locked">
+                        <strong>Impacto en banco.</strong>
+                        <span>Este egreso reduce el saldo en libros de la cuenta seleccionada.</span>
+                    </div>
+                }
+
+                @if (selectedExpense is not null && !CanEditForm)
+                {
+                    <div class="deposit-hint locked">
+                        <strong>Solo lectura.</strong>
+                        <span>Los egresos conciliados o anulados no se editan; se anulan y se crea uno nuevo si hace falta.</span>
+                    </div>
+                }
+
+                <div class="form-actions">
+                    <button class="btn btn-primary" type="submit" disabled="@(isSaving || !CanEditForm)">
+                        @(isSaving ? "Guardando..." : "Guardar egreso")
+                    </button>
+
+                    @if (selectedExpense is not null && !selectedExpense.IsVoided)
+                    {
+                        <button class="btn btn-outline-danger" type="button" @onclick="AskVoid" disabled="@selectedExpense.IsReconciled">Anular</button>
+                    }
+
+                    <button class="btn btn-outline-secondary" type="button" @onclick="NewExpense">Limpiar</button>
+                </div>
+            </EditForm>
+        </section>
+    </section>
+}
+
+@if (showVoidDialog)
+{
+    <div class="modal-backdrop-lite">
+        <div class="void-dialog">
+            <h2>Anular egreso #@entry.Id</h2>
+            <p>Esta acción conserva el historial y devuelve el monto al saldo en libros si el egreso no está conciliado.</p>
+            <label>Motivo</label>
+            <InputTextArea class="form-control" @bind-Value="voidReason" rows="3" />
+            <div class="form-actions">
+                <button class="btn btn-outline-secondary" @onclick="CancelVoid">Cancelar</button>
+                <button class="btn btn-outline-danger" @onclick="VoidAsync">Anular egreso</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (showCheckPrintDialog)
+{
+    <div class="modal-backdrop-lite">
+        <div class="void-dialog">
+            <h2>Tipo de cheque</h2>
+            <p>¿Este egreso es un cheque que se imprimirá desde la oficina?</p>
+            <div class="deposit-hint locked">
+                <strong>Cheque enviado por el banco.</strong>
+                <span>Guarda solamente el egreso, como pagos directos del banco a Nipsco u otros suplidores.</span>
+            </div>
+            <div class="deposit-hint route">
+                <strong>Cheque para imprimir.</strong>
+                <span>Guarda el egreso y crea un borrador en el módulo de Cheques para imprimir el voucher.</span>
+            </div>
+            <div class="form-actions">
+                <button class="btn btn-outline-secondary" type="button" @onclick="CancelCheckPrintDialog">Cancelar</button>
+                <button class="btn btn-outline-secondary" type="button" @onclick="SaveBankIssuedCheckAsync">No, es del banco</button>
+                <button class="btn btn-primary" type="button" @onclick="SavePrintableCheckAsync">Sí, preparar para imprimir</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private ExpenseLookups lookups = new([], [], []);
+    private IReadOnlyList<ExpenseTransaction> expenses = [];
+    private List<ExpenseTransaction> filteredExpenses => FilterExpenses().ToList();
+    private ExpenseEntry entry = new();
+    private ExpenseTransaction? selectedExpense;
+    private int? selectedId;
+    private string searchText = string.Empty;
+    private string statusFilter = "active";
+    private string? statusMessage;
+    private string statusCss = "alert-info";
+    private string voidReason = string.Empty;
+    private DateTime startDate = DateTime.Today.AddDays(-30);
+    private DateTime endDate = DateTime.Today;
+    private bool isLoading = true;
+    private bool isSaving;
+    private bool showVoidDialog;
+    private bool showDuplicateConfirm;
+    private bool showCheckPrintDialog;
+    private bool createPrintableCheckAfterSave;
+
+    private string FormModeLabel => entry.Id > 0 ? "Editar egreso" : "Registrar gasto";
+    private bool CanEditForm => entry.Id <= 0 || selectedExpense?.CanModify == true;
+    private bool UsesCheck => entry.PaymentMethod.Equals("Cheque", StringComparison.OrdinalIgnoreCase);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+        statusMessage = null;
+        showDuplicateConfirm = false;
+
+        try
+        {
+            lookups = await ExpenseRepository.GetLookupsAsync();
+            expenses = await ExpenseRepository.GetRecentAsync(startDate, endDate);
+            if (entry.AccountId <= 0)
+            {
+                entry.AccountId = lookups.Accounts.FirstOrDefault()?.Id ?? 0;
+            }
+
+            if (entry.SubcategoryId <= 0)
+            {
+                entry.SubcategoryId = lookups.Subcategories.FirstOrDefault()?.Id ?? 0;
+            }
+
+            if (string.IsNullOrWhiteSpace(entry.PaymentMethod))
+            {
+                entry.PaymentMethod = lookups.PaymentMethods.FirstOrDefault() ?? "Cheque";
+            }
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"No se pudieron cargar egresos: {FriendlyDatabaseMessage(ex)}", "alert-danger");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private IEnumerable<ExpenseTransaction> FilterExpenses()
+    {
+        var query = expenses.AsEnumerable();
+        query = statusFilter switch
+        {
+            "active" => query.Where(e => !e.IsVoided),
+            "check" => query.Where(e => !e.IsVoided && e.PaymentMethod.Equals("Cheque", StringComparison.OrdinalIgnoreCase)),
+            "voided" => query.Where(e => e.IsVoided),
+            _ => query
+        };
+
+        if (!string.IsNullOrWhiteSpace(searchText))
+        {
+            var text = searchText.Trim();
+            query = query.Where(e =>
+                e.Description.Contains(text, StringComparison.OrdinalIgnoreCase) ||
+                e.SubcategoryName.Contains(text, StringComparison.OrdinalIgnoreCase) ||
+                e.AccountName.Contains(text, StringComparison.OrdinalIgnoreCase) ||
+                e.PaymentMethod.Contains(text, StringComparison.OrdinalIgnoreCase) ||
+                (e.CheckNumber?.Contains(text, StringComparison.OrdinalIgnoreCase) ?? false));
+        }
+
+        return query;
+    }
+
+    private void NewExpense()
+    {
+        entry = new ExpenseEntry
+        {
+            Date = DateTime.Today,
+            AccountId = lookups.Accounts.FirstOrDefault()?.Id ?? 0,
+            SubcategoryId = lookups.Subcategories.FirstOrDefault()?.Id ?? 0,
+            PaymentMethod = lookups.PaymentMethods.FirstOrDefault() ?? "Cheque"
+        };
+        selectedId = null;
+        selectedExpense = null;
+        statusMessage = null;
+        voidReason = string.Empty;
+        showDuplicateConfirm = false;
+    }
+
+    private void EditExpense(ExpenseTransaction expense)
+    {
+        selectedId = expense.Id;
+        selectedExpense = expense;
+        statusMessage = null;
+        showDuplicateConfirm = false;
+        entry = new ExpenseEntry
+        {
+            Id = expense.Id,
+            Date = expense.Date,
+            Description = expense.Description,
+            Amount = expense.Amount,
+            AccountId = expense.AccountId,
+            SubcategoryId = expense.SubcategoryId,
+            PaymentMethod = expense.PaymentMethod,
+            CheckNumber = expense.CheckNumber
+        };
+    }
+
+    private async Task SaveAsync()
+    {
+        if (UsesCheck && entry.Id <= 0)
+        {
+            showCheckPrintDialog = true;
+            return;
+        }
+
+        await SaveCoreAsync(false);
+    }
+
+    private async Task SaveDuplicateAsync() => await SaveCoreAsync(true);
+
+    private void CancelCheckPrintDialog()
+    {
+        showCheckPrintDialog = false;
+        createPrintableCheckAfterSave = false;
+    }
+
+    private async Task SaveBankIssuedCheckAsync()
+    {
+        showCheckPrintDialog = false;
+        createPrintableCheckAfterSave = false;
+        await SaveCoreAsync(false);
+    }
+
+    private async Task SavePrintableCheckAsync()
+    {
+        if (string.IsNullOrWhiteSpace(entry.CheckNumber))
+        {
+            showCheckPrintDialog = false;
+            SetStatus("Para preparar un cheque para imprimir, escribe el número de cheque primero.", "alert-warning");
+            return;
+        }
+
+        showCheckPrintDialog = false;
+        createPrintableCheckAfterSave = true;
+        await SaveCoreAsync(false);
+    }
+
+    private async Task SaveCoreAsync(bool ignorePossibleDuplicate)
+    {
+        isSaving = true;
+        showDuplicateConfirm = false;
+
+        try
+        {
+            if (!UsesCheck)
+            {
+                entry.CheckNumber = null;
+            }
+
+            var result = await ExpenseRepository.SaveAsync(entry, await GetCurrentUserNameAsync(), ignorePossibleDuplicate);
+            if (!result.Saved)
+            {
+                showDuplicateConfirm = result.PossibleDuplicate;
+                SetStatus(result.ErrorMessage ?? "No se pudo guardar el egreso.", result.PossibleDuplicate ? "alert-warning" : "alert-danger");
+                return;
+            }
+
+            var message = "Egreso guardado correctamente.";
+            if (createPrintableCheckAfterSave && result.TransactionId.HasValue)
+            {
+                var checkResult = await CreatePrintableCheckDraftAsync(result.TransactionId.Value);
+                if (!checkResult.Saved)
+                {
+                    createPrintableCheckAfterSave = false;
+                    SetStatus($"Egreso guardado, pero no se pudo crear el cheque para imprimir: {checkResult.ErrorMessage}", "alert-warning");
+                    await LoadAsync();
+                    return;
+                }
+
+                message = "Egreso guardado y cheque preparado para imprimir.";
+            }
+
+            createPrintableCheckAfterSave = false;
+            SetStatus(message, "alert-success");
+            await LoadAsync();
+            if (result.TransactionId.HasValue)
+            {
+                var saved = expenses.FirstOrDefault(e => e.Id == result.TransactionId.Value);
+                if (saved is not null)
+                {
+                    EditExpense(saved);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"No se pudo guardar el egreso: {FriendlyDatabaseMessage(ex)}", "alert-danger");
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task<CheckSaveResult> CreatePrintableCheckDraftAsync(int expenseId)
+    {
+        var checkEntry = new CheckEntry
+        {
+            ExpenseId = expenseId,
+            AccountId = entry.AccountId,
+            CheckNumber = entry.CheckNumber?.Trim() ?? string.Empty,
+            CheckDate = entry.Date,
+            Payee = entry.Description,
+            Amount = entry.Amount,
+            Memo = lookups.Subcategories.FirstOrDefault(s => s.Id == entry.SubcategoryId)?.Name
+        };
+
+        return await CheckRepository.SaveDraftAsync(checkEntry, await GetCurrentUserNameAsync());
+    }
+
+    private void AskVoid()
+    {
+        voidReason = string.Empty;
+        showVoidDialog = true;
+    }
+
+    private void CancelVoid()
+    {
+        showVoidDialog = false;
+        voidReason = string.Empty;
+    }
+
+    private async Task VoidAsync()
+    {
+        if (selectedExpense is null)
+        {
+            return;
+        }
+
+        var result = await ExpenseRepository.VoidAsync(selectedExpense.Id, voidReason, await GetCurrentUserNameAsync());
+        showVoidDialog = false;
+        SetStatus(result.Saved ? "Egreso anulado correctamente." : result.ErrorMessage ?? "No se pudo anular el egreso.", result.Saved ? "alert-success" : "alert-danger");
+        await LoadAsync();
+        NewExpense();
+    }
+
+    private async Task<string> GetCurrentUserNameAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return authState.User.Identity?.Name ?? "CFS.Web";
+    }
+
+    private void SetStatus(string message, string css)
+    {
+        statusMessage = message;
+        statusCss = css;
+    }
+
+    private string StatusButtonClass(string value) =>
+        statusFilter == value ? "selected" : string.Empty;
+
+    private static string FriendlyDatabaseMessage(Exception ex) =>
+        ex.Message.Contains("Transacciones", StringComparison.OrdinalIgnoreCase) ||
+        ex.Message.Contains("Subcategorias", StringComparison.OrdinalIgnoreCase) ||
+        ex.Message.Contains("Categorias", StringComparison.OrdinalIgnoreCase)
+            ? "No se pudo leer la estructura de transacciones/categorías. Verifica que existan categorías con TipoCategoria = 'Egreso'."
+            : ex.Message;
+
+    private static string Money(decimal value) => value.ToString("C2");
+}

@@ -1,0 +1,872 @@
+@page "/ingresos"
+@rendermode InteractiveServer
+@inject IIncomeRepository IncomeRepository
+@inject IDepositRepository DepositRepository
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+
+<PageTitle>Fidelis Ingresos</PageTitle>
+
+<div class="screen-header">
+    <div>
+        <p class="eyebrow">Sales receipt</p>
+        <h1>Ingresos</h1>
+    </div>
+    <div class="quick-actions">
+        <button class="btn btn-primary" @onclick="NewIncome">Nuevo ingreso</button>
+        <button class="btn btn-outline-secondary" @onclick="LoadAsync" disabled="@isLoading">Actualizar</button>
+    </div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(statusMessage))
+{
+    <div class="alert @statusCss" role="alert">@statusMessage</div>
+}
+
+@if (isLoading)
+{
+    <div class="status-panel">Cargando ingresos...</div>
+}
+else
+{
+    <section class="income-workspace">
+        <aside class="income-list-panel">
+            <div class="panel-heading">
+                <div>
+                    <h2>Recientes</h2>
+                    <span>@filteredTransactions.Count ingreso(s) • @Money(FilteredTotal)</span>
+                </div>
+            </div>
+
+            <div class="income-filter">
+                <input class="form-control" placeholder="Buscar miembro, categoría, método..." @bind="searchText" @bind:event="oninput" />
+                <div class="date-filter">
+                    <InputDate class="form-control" @bind-Value="filterStart" />
+                    <InputDate class="form-control" @bind-Value="filterEnd" />
+                </div>
+                <div class="segmented-filter" role="group" aria-label="Filtrar ingresos">
+                    <button class="@StatusButtonClass("active")" type="button" @onclick='() => statusFilter = "active"'>Activos</button>
+                    <button class="@StatusButtonClass("pending")" type="button" @onclick='() => statusFilter = "pending"'>Pendientes</button>
+                    <button class="@StatusButtonClass("bank")" type="button" @onclick='() => statusFilter = "bank"'>Banco</button>
+                    <button class="@StatusButtonClass("all")" type="button" @onclick='() => statusFilter = "all"'>Todos</button>
+                </div>
+            </div>
+
+            <div class="income-list">
+                @foreach (var item in filteredTransactions)
+                {
+                    <button class="income-row @(selectedId == item.Id ? "selected" : "")" @onclick="() => EditIncome(item)">
+                        <span class="row-main">
+                            <strong>@MemberNameDisplay(item)</strong>
+                            <small>@item.SubcategoryName • @item.PaymentMethod</small>
+                        </span>
+                        <span class="row-side">
+                            <strong>@Money(item.Amount)</strong>
+                            <small>@item.Date.ToString("MM/dd/yyyy")</small>
+                        </span>
+                        <span class="row-badges">
+                            @if (item.IsVoided)
+                            {
+                                <span class="badge-soft danger">Anulado</span>
+                            }
+                            else if (item.IsDeposited)
+                            {
+                                <span class="badge-soft">Depositado</span>
+                            }
+                            else if (item.IsReconciled)
+                            {
+                                <span class="badge-soft">Conciliado</span>
+                            }
+                            else if (ImpactsBank(item.PaymentMethod))
+                            {
+                                <span class="badge-soft success">Banco</span>
+                            }
+                            else
+                            {
+                                <span class="badge-soft warning">Pendiente depósito</span>
+                            }
+                        </span>
+                    </button>
+                }
+            </div>
+        </aside>
+
+        <section class="receipt-panel">
+            <EditForm Model="entry" OnValidSubmit="SaveAsync">
+                <DataAnnotationsValidator />
+
+                <div class="receipt-topline">
+                    <div>
+                        <p class="eyebrow">@FormModeLabel</p>
+                        <h2>@(entry.Id > 0 ? $"Ingreso #{entry.Id}" : "Nuevo ingreso")</h2>
+                    </div>
+                    <div class="receipt-amount">
+                        <span>Total</span>
+                        <strong>@Money(entry.Amount)</strong>
+                    </div>
+                </div>
+
+                @if (possibleDuplicate)
+                {
+                    <div class="duplicate-callout">
+                        <strong>Posible duplicado.</strong>
+                        <span>Ya existe un ingreso activo con la misma fecha, monto, subcategoría y miembro.</span>
+                        <button type="button" class="btn btn-primary btn-sm" @onclick="SaveIgnoringDuplicateAsync">Guardar de todos modos</button>
+                    </div>
+                }
+
+                <div class="receipt-grid">
+                    <div class="field">
+                        <label>Miembro / donante</label>
+                        <div class="member-picker">
+                            <div class="member-picker-control">
+                                <input class="form-control compact-control"
+                                       placeholder="Seleccionar miembro / donante"
+                                       value="@MemberPickerText"
+                                       @onfocus="OpenMemberPicker"
+                                       @oninput="OnMemberSearchInput"
+                                       disabled="@(!CanEditForm)" />
+                                <button class="member-picker-toggle" type="button" @onclick="ToggleMemberPicker" disabled="@(!CanEditForm)" aria-label="Abrir lista de miembros">
+                                    <span>⌄</span>
+                                </button>
+                            </div>
+                            @if (showMemberPicker && CanEditForm)
+                            {
+                                <div class="member-picker-menu">
+                                    <button class="member-picker-action" type="button" @onclick="OpenNewMemberDialog">
+                                        <span>+</span>
+                                        <strong>Añadir nuevo</strong>
+                                    </button>
+                                    <button class="member-picker-option" type="button" @onclick="ClearMemberSelection">
+                                        <span>Sin miembro</span>
+                                    </button>
+                                    @foreach (var member in FilteredMembers)
+                                    {
+                                        <button class="member-picker-option" type="button" @onclick="() => SelectMember(member)">
+                                            <span>@member.Name</span>
+                                            <em>Miembro / Donante</em>
+                                        </button>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <label>Fecha</label>
+                        <InputDate class="form-control" @bind-Value="entry.Date" disabled="@(!CanEditForm)" />
+                        <ValidationMessage For="() => entry.Date" />
+                    </div>
+
+                    <div class="field">
+                        <label>Subcategoría</label>
+                        <InputSelect class="form-select" @bind-Value="entry.SubcategoryId" disabled="@(!CanEditForm)">
+                            <option value="0">Seleccionar</option>
+                            @foreach (var subcategory in lookups.Subcategories)
+                            {
+                                <option value="@subcategory.Id">@subcategory.Name</option>
+                            }
+                        </InputSelect>
+                        <ValidationMessage For="() => entry.SubcategoryId" />
+                    </div>
+
+                    <div class="field">
+                        <label>Cuenta</label>
+                        <InputSelect class="form-select" @bind-Value="entry.AccountId" disabled="@(!CanEditForm)">
+                            <option value="0">Seleccionar</option>
+                            @foreach (var account in lookups.Accounts)
+                            {
+                                <option value="@account.Id">@account.Name</option>
+                            }
+                        </InputSelect>
+                        <ValidationMessage For="() => entry.AccountId" />
+                    </div>
+
+                    <div class="field">
+                        <label>Método de pago</label>
+                        <InputSelect class="form-select" @bind-Value="entry.PaymentMethod" disabled="@(!CanEditForm)">
+                            @foreach (var method in lookups.PaymentMethods)
+                            {
+                                <option value="@method">@method</option>
+                            }
+                        </InputSelect>
+                        <ValidationMessage For="() => entry.PaymentMethod" />
+                    </div>
+
+                    <div class="field">
+                        <label>Número de cheque</label>
+                        <InputText class="form-control" @bind-Value="entry.CheckNumber" disabled="@(!IsCheck || !CanEditForm)" />
+                        <ValidationMessage For="() => entry.CheckNumber" />
+                    </div>
+
+                    <div class="field amount-field">
+                        <label>Monto</label>
+                        <InputNumber class="form-control" @bind-Value="entry.Amount" disabled="@(!CanEditForm)" />
+                        <ValidationMessage For="() => entry.Amount" />
+                    </div>
+
+                    <div class="field span-2">
+                        <label>Descripción</label>
+                        <InputTextArea class="form-control" @bind-Value="entry.Description" rows="3" disabled="@(!CanEditForm)" />
+                        <ValidationMessage For="() => entry.Description" />
+                    </div>
+                </div>
+
+                <div class="deposit-hint @(ImpactsBank(entry.PaymentMethod) ? "bank" : "pending")">
+                    @if (ImpactsBank(entry.PaymentMethod))
+                    {
+                        <strong>Impacta banco ahora.</strong>
+                        <span>Este método suma directo al saldo de la cuenta seleccionada.</span>
+                    }
+                    else
+                    {
+                        <strong>Pendiente de depósito.</strong>
+                        <span>Efectivo y cheque quedan para agruparse luego en Depósitos.</span>
+                    }
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(RouteHint))
+                {
+                    <div class="deposit-hint route">
+                        <strong>Ruteo automático.</strong>
+                        <span>@RouteHint</span>
+                    </div>
+                }
+
+                @if (entry.Id > 0 && selectedTransaction is not null && !selectedTransaction.CanModify)
+                {
+                    <div class="deposit-hint locked">
+                        <strong>Solo lectura.</strong>
+                        <span>@LockedReason(selectedTransaction)</span>
+                    </div>
+                }
+
+                <div class="form-actions">
+                    <button class="btn btn-primary" type="submit" @onclick='() => saveIntent = "new"' disabled="@(isSaving || !CanEditForm)">
+                        @(isSaving && saveIntent == "new" ? "Guardando..." : "Guardar + nuevo")
+                    </button>
+                    <button class="btn btn-outline-secondary" type="submit" @onclick='() => saveIntent = "close"' disabled="@(isSaving || !CanEditForm)">
+                        @(isSaving && saveIntent == "close" ? "Guardando..." : "Guardar y cerrar")
+                    </button>
+                    <button class="btn btn-outline-secondary" type="button" @onclick="NewIncome">Limpiar</button>
+                    @if (entry.Id > 0 && selectedTransaction is not null && selectedTransaction.CanModify)
+                    {
+                        <button class="btn btn-outline-danger" type="button" @onclick="AskVoid">Anular</button>
+                    }
+                </div>
+            </EditForm>
+        </section>
+    </section>
+}
+
+@if (showVoidDialog)
+{
+    <div class="modal-backdrop-lite">
+        <div class="void-dialog">
+            <h2>Anular ingreso #@entry.Id</h2>
+            <p>Esta acción marca el ingreso como anulado y revierte el saldo si el método impactó banco inmediatamente.</p>
+            <label>Motivo</label>
+            <InputTextArea class="form-control" @bind-Value="voidReason" rows="3" />
+            <div class="form-actions">
+                <button class="btn btn-outline-secondary" @onclick="CancelVoid">Cancelar</button>
+                <button class="btn btn-outline-danger" @onclick="VoidAsync">Anular ingreso</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (showNewMemberDialog)
+{
+    <div class="modal-backdrop-lite">
+        <div class="void-dialog member-dialog">
+            <h2>Nuevo miembro / donante</h2>
+            <p>Añade el contacto y quedará seleccionado en el ingreso actual.</p>
+
+            @if (!string.IsNullOrWhiteSpace(memberStatusMessage))
+            {
+                <div class="@memberStatusCss">@memberStatusMessage</div>
+            }
+
+            <label>Nombre</label>
+            <input class="form-control" @bind="newMember.FirstName" disabled="@isSavingMember" />
+            <label>Apellido</label>
+            <input class="form-control" @bind="newMember.LastName" disabled="@isSavingMember" />
+
+            <div class="form-actions">
+                <button class="btn btn-outline-secondary" type="button" @onclick="CancelNewMemberDialog" disabled="@isSavingMember">Cancelar</button>
+                <button class="btn btn-primary" type="button" @onclick="CreateMemberAsync" disabled="@isSavingMember">
+                    @(isSavingMember ? "Guardando..." : "Guardar miembro")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (showCloseDepositDialog)
+{
+    <div class="modal-backdrop-lite">
+        <div class="void-dialog income-close-dialog">
+            <h2>Resumen para depósito</h2>
+            <p>Estas son las transacciones de efectivo y cheque guardadas en esta sesión.</p>
+
+            <div class="session-deposit-summary">
+                @foreach (var group in SessionDepositAccountGroups)
+                {
+                    <div class="account">
+                        <span>@group.AccountName</span>
+                        <strong>@group.ItemCount transacción(es)</strong>
+                        <b>@Money(group.Total)</b>
+                    </div>
+                    <div>
+                        <span>Efectivo</span>
+                        <strong>@group.CashCount transacción(es)</strong>
+                        <b>@Money(group.CashTotal)</b>
+                    </div>
+                    <div>
+                        <span>Cheque</span>
+                        <strong>@group.CheckCount transacción(es)</strong>
+                        <b>@Money(group.CheckTotal)</b>
+                    </div>
+                }
+                <div class="total">
+                    <span>Total general para depositar</span>
+                    <strong>@SessionDepositItemCount transacción(es)</strong>
+                    <b>@Money(SessionDepositTotal)</b>
+                </div>
+            </div>
+
+            @if (SessionDepositItemCount == 0)
+            {
+                <div class="deposit-hint locked">
+                    <strong>No hay efectivo o cheques en esta sesión.</strong>
+                    <span>Puedes cerrar la sesión de ingresos sin crear depósito automático.</span>
+                </div>
+            }
+
+            <div class="form-actions">
+                <button class="btn btn-outline-secondary" type="button" @onclick="CancelCloseDeposit" disabled="@isCreatingDeposit">Cancelar</button>
+                <button class="btn btn-primary" type="button" @onclick="AcceptCloseDepositAsync" disabled="@isCreatingDeposit">
+                    @(isCreatingDeposit ? "Procesando..." : SessionDepositItemCount == 0 ? "Cerrar sesión" : "Aceptar")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private IncomeLookups lookups = new([], [], [], []);
+    private IReadOnlyList<IncomeTransaction> transactions = [];
+    private readonly List<IncomeTransaction> sessionDepositTransactions = [];
+    private List<IncomeTransaction> filteredTransactions => FilterTransactions().ToList();
+    private IEnumerable<LookupOption> FilteredMembers => FilterMembers();
+    private IncomeEntry entry = new();
+    private IncomeTransaction? selectedTransaction;
+    private DateTime filterStart = DateTime.Today.AddDays(-30);
+    private DateTime filterEnd = DateTime.Today;
+    private string searchText = string.Empty;
+    private string memberSearch = string.Empty;
+    private string selectedMemberName = string.Empty;
+    private string statusFilter = "active";
+    private string saveIntent = "new";
+    private string? statusMessage;
+    private string statusCss = "alert-info";
+    private string? memberStatusMessage;
+    private string memberStatusCss = "alert-info";
+    private string voidReason = string.Empty;
+    private int? selectedId;
+    private bool isLoading = true;
+    private bool isSaving;
+    private bool isSavingMember;
+    private bool isCreatingDeposit;
+    private bool possibleDuplicate;
+    private bool showMemberPicker;
+    private bool showVoidDialog;
+    private bool showCloseDepositDialog;
+    private bool showNewMemberDialog;
+    private MemberQuickEntry newMember = new();
+
+    private string FormModeLabel => entry.Id > 0 ? "Editar recibo" : "Registrar recibo";
+    private bool IsCheck => entry.PaymentMethod.Equals("Cheque", StringComparison.OrdinalIgnoreCase);
+    private bool CanEditForm => entry.Id <= 0 || selectedTransaction?.CanModify == true;
+    private decimal FilteredTotal => filteredTransactions.Where(t => !t.IsVoided).Sum(t => t.Amount);
+    private int SessionDepositItemCount => sessionDepositTransactions.Count;
+    private decimal SessionDepositTotal => sessionDepositTransactions.Sum(t => t.Amount);
+    private IReadOnlyList<SessionDepositAccountSummary> SessionDepositAccountGroups => BuildSessionDepositAccountGroups();
+    private string? RouteHint => GetRouteHint();
+    private string MemberPickerText => showMemberPicker ? memberSearch : selectedMemberName;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+        statusMessage = null;
+
+        try
+        {
+            lookups = await IncomeRepository.GetLookupsAsync();
+            transactions = await IncomeRepository.GetRecentAsync(filterStart, filterEnd);
+            if (entry.AccountId <= 0)
+            {
+                entry.AccountId = lookups.Accounts.FirstOrDefault(a => a.Name.Contains("Checking-6163", StringComparison.OrdinalIgnoreCase))?.Id ?? 0;
+            }
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"No se pudieron cargar ingresos: {ex.Message}", "alert-danger");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private IEnumerable<IncomeTransaction> FilterTransactions()
+    {
+        var query = transactions.AsEnumerable();
+        query = statusFilter switch
+        {
+            "active" => query.Where(t => !t.IsVoided),
+            "pending" => query.Where(t => !t.IsVoided && !t.IsDeposited && !ImpactsBank(t.PaymentMethod)),
+            "bank" => query.Where(t => !t.IsVoided && ImpactsBank(t.PaymentMethod)),
+            _ => query
+        };
+
+        if (!string.IsNullOrWhiteSpace(searchText))
+        {
+            var text = searchText.Trim();
+            query = query.Where(t =>
+                t.SubcategoryName.Contains(text, StringComparison.OrdinalIgnoreCase) ||
+                t.AccountName.Contains(text, StringComparison.OrdinalIgnoreCase) ||
+                t.PaymentMethod.Contains(text, StringComparison.OrdinalIgnoreCase) ||
+                (t.MemberName?.Contains(text, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                t.Description.Contains(text, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return query;
+    }
+
+    private IEnumerable<LookupOption> FilterMembers()
+    {
+        var members = lookups.Members.OrderBy(m => m.Name).AsEnumerable();
+        if (!string.IsNullOrWhiteSpace(memberSearch))
+        {
+            var text = memberSearch.Trim();
+            members = members.Where(m => m.Name.Contains(text, StringComparison.OrdinalIgnoreCase));
+        }
+
+        var selected = entry.MemberId.HasValue
+            ? lookups.Members.Where(m => m.Id == entry.MemberId.Value)
+            : [];
+
+        return selected.Concat(members).DistinctBy(m => m.Id).Take(75);
+    }
+
+    private void OpenMemberPicker()
+    {
+        showMemberPicker = true;
+        memberSearch = selectedMemberName;
+    }
+
+    private void ToggleMemberPicker()
+    {
+        if (showMemberPicker)
+        {
+            showMemberPicker = false;
+            memberSearch = selectedMemberName;
+            return;
+        }
+
+        OpenMemberPicker();
+    }
+
+    private void OnMemberSearchInput(ChangeEventArgs args)
+    {
+        memberSearch = args.Value?.ToString() ?? string.Empty;
+        showMemberPicker = true;
+        if (!string.Equals(memberSearch, selectedMemberName, StringComparison.Ordinal))
+        {
+            entry.MemberId = null;
+            selectedMemberName = string.Empty;
+        }
+    }
+
+    private void SelectMember(LookupOption member)
+    {
+        entry.MemberId = member.Id;
+        selectedMemberName = member.Name;
+        memberSearch = member.Name;
+        showMemberPicker = false;
+    }
+
+    private void ClearMemberSelection()
+    {
+        entry.MemberId = null;
+        selectedMemberName = string.Empty;
+        memberSearch = string.Empty;
+        showMemberPicker = false;
+    }
+
+    private void OpenNewMemberDialog()
+    {
+        newMember = new MemberQuickEntry
+        {
+            FirstName = memberSearch.Trim()
+        };
+        memberStatusMessage = null;
+        showMemberPicker = false;
+        showNewMemberDialog = true;
+    }
+
+    private void CancelNewMemberDialog()
+    {
+        showNewMemberDialog = false;
+        memberStatusMessage = null;
+        newMember = new MemberQuickEntry();
+    }
+
+    private async Task CreateMemberAsync()
+    {
+        isSavingMember = true;
+        memberStatusMessage = null;
+
+        try
+        {
+            var result = await IncomeRepository.CreateMemberAsync(newMember);
+            if (!result.Saved || !result.MemberId.HasValue)
+            {
+                memberStatusCss = "alert alert-danger";
+                memberStatusMessage = result.ErrorMessage ?? "No se pudo crear el miembro.";
+                return;
+            }
+
+            await RefreshLookupsAsync();
+            entry.MemberId = result.MemberId.Value;
+            selectedMemberName = result.DisplayName ?? string.Empty;
+            memberSearch = selectedMemberName;
+            showNewMemberDialog = false;
+            SetStatus($"{result.DisplayName ?? "Miembro"} seleccionado en el ingreso.", "alert-success");
+        }
+        finally
+        {
+            isSavingMember = false;
+        }
+    }
+
+    private async Task RefreshLookupsAsync()
+    {
+        lookups = await IncomeRepository.GetLookupsAsync();
+    }
+
+    private void NewIncome()
+    {
+        var defaultAccount = lookups.Accounts.FirstOrDefault(a => a.Name.Contains("Checking-6163", StringComparison.OrdinalIgnoreCase))?.Id ?? lookups.Accounts.FirstOrDefault()?.Id ?? 0;
+        entry = new IncomeEntry
+        {
+            Date = DateTime.Today,
+            AccountId = defaultAccount,
+            PaymentMethod = lookups.PaymentMethods.Contains("Efectivo") ? "Efectivo" : lookups.PaymentMethods.FirstOrDefault() ?? "Efectivo"
+        };
+        selectedId = null;
+        selectedTransaction = null;
+        possibleDuplicate = false;
+        statusMessage = null;
+        voidReason = string.Empty;
+        memberSearch = string.Empty;
+        selectedMemberName = string.Empty;
+        showMemberPicker = false;
+    }
+
+    private void EditIncome(IncomeTransaction income)
+    {
+        selectedId = income.Id;
+        selectedTransaction = income;
+        possibleDuplicate = false;
+        statusMessage = null;
+        selectedMemberName = income.MemberName ?? string.Empty;
+        memberSearch = selectedMemberName;
+        showMemberPicker = false;
+        entry = new IncomeEntry
+        {
+            Id = income.Id,
+            Date = income.Date,
+            Description = income.Description,
+            Amount = income.Amount,
+            AccountId = income.AccountId,
+            SubcategoryId = income.SubcategoryId,
+            MemberId = income.MemberId,
+            PaymentMethod = income.PaymentMethod,
+            CheckNumber = income.CheckNumber
+        };
+    }
+
+    private async Task SaveAsync()
+    {
+        var result = await SaveCoreAsync(ignoreDuplicate: false);
+        if (saveIntent == "close" && result?.Saved == true && !result.PossibleDuplicate)
+        {
+            showCloseDepositDialog = true;
+        }
+    }
+
+    private async Task SaveIgnoringDuplicateAsync()
+    {
+        await SaveCoreAsync(ignoreDuplicate: true);
+    }
+
+    private async Task<IncomeSaveResult?> SaveCoreAsync(bool ignoreDuplicate)
+    {
+        isSaving = true;
+        possibleDuplicate = false;
+
+        try
+        {
+            if (!IsCheck)
+            {
+                entry.CheckNumber = null;
+            }
+
+            var result = await IncomeRepository.SaveAsync(entry, await GetCurrentUserNameAsync(), ignoreDuplicate);
+            if (result.PossibleDuplicate)
+            {
+                possibleDuplicate = true;
+                SetStatus("Posible duplicado detectado. Revisa el ingreso o guarda de todos modos.", "alert-warning");
+                return result;
+            }
+
+            if (!result.Saved)
+            {
+                SetStatus(result.ErrorMessage ?? "No se pudo guardar el ingreso.", "alert-danger");
+                return result;
+            }
+
+            SetStatus("Ingreso guardado correctamente.", "alert-success");
+            await LoadAsync();
+            if (result.TransactionId.HasValue)
+            {
+                var saved = transactions.FirstOrDefault(t => t.Id == result.TransactionId.Value);
+                if (saved is not null)
+                {
+                    TrackSessionDepositTransaction(saved);
+                    if (saveIntent == "new")
+                    {
+                        NewIncome();
+                        SetStatus("Ingreso guardado correctamente.", "alert-success");
+                    }
+                    else
+                    {
+                        EditIncome(saved);
+                    }
+                }
+            }
+
+            return result;
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void TrackSessionDepositTransaction(IncomeTransaction transaction)
+    {
+        if (!IsDepositPaymentMethod(transaction.PaymentMethod) || transaction.IsDeposited || transaction.IsVoided || transaction.IsReconciled)
+        {
+            return;
+        }
+
+        sessionDepositTransactions.RemoveAll(t => t.Id == transaction.Id);
+        sessionDepositTransactions.Add(transaction);
+    }
+
+    private void CancelCloseDeposit()
+    {
+        showCloseDepositDialog = false;
+    }
+
+    private async Task AcceptCloseDepositAsync()
+    {
+        if (SessionDepositItemCount == 0)
+        {
+            showCloseDepositDialog = false;
+            NavigationManager.NavigateTo("/dashboard");
+            return;
+        }
+
+        isCreatingDeposit = true;
+        try
+        {
+            var deposits = SessionDepositAccountGroups
+                .Select(group => new DepositEntry
+                {
+                    AccountId = group.AccountId,
+                    DepositDate = DateTime.Today,
+                    ActualTotal = group.Total,
+                    Notes = "Depósito creado desde cierre de ingresos.",
+                    TransactionIds = group.TransactionIds.ToList()
+                })
+                .ToList();
+
+            var result = await DepositRepository.CreateBatchAsync(deposits, await GetCurrentUserNameAsync());
+            if (!result.Saved)
+            {
+                SetStatus(result.ErrorMessage ?? "No se pudo crear el depósito automático.", "alert-danger");
+                showCloseDepositDialog = false;
+                return;
+            }
+
+            sessionDepositTransactions.Clear();
+            showCloseDepositDialog = false;
+            NavigationManager.NavigateTo("/dashboard");
+        }
+        finally
+        {
+            isCreatingDeposit = false;
+        }
+    }
+
+    private void AskVoid()
+    {
+        voidReason = string.Empty;
+        showVoidDialog = true;
+    }
+
+    private void CancelVoid()
+    {
+        showVoidDialog = false;
+        voidReason = string.Empty;
+    }
+
+    private async Task VoidAsync()
+    {
+        var result = await IncomeRepository.VoidAsync(entry.Id, voidReason, await GetCurrentUserNameAsync());
+        if (!result.Saved)
+        {
+            SetStatus(result.ErrorMessage ?? "No se pudo anular el ingreso.", "alert-danger");
+            showVoidDialog = false;
+            return;
+        }
+
+        showVoidDialog = false;
+        SetStatus("Ingreso anulado correctamente.", "alert-success");
+        await LoadAsync();
+        NewIncome();
+    }
+
+    private async Task<string> GetCurrentUserNameAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return authState.User.Identity?.Name ?? "CFS.Web";
+    }
+
+    private void SetStatus(string message, string css)
+    {
+        statusMessage = message;
+        statusCss = css;
+    }
+
+    private static bool ImpactsBank(string? paymentMethod)
+    {
+        if (string.IsNullOrWhiteSpace(paymentMethod))
+        {
+            return false;
+        }
+
+        var method = paymentMethod.Trim().ToUpperInvariant();
+        return method is not ("EFECTIVO" or "CHEQUE");
+    }
+
+    private static bool IsDepositPaymentMethod(string? paymentMethod)
+    {
+        if (string.IsNullOrWhiteSpace(paymentMethod))
+        {
+            return false;
+        }
+
+        var method = paymentMethod.Trim().ToUpperInvariant();
+        return method is "EFECTIVO" or "CHEQUE";
+    }
+
+    private int SessionCount(string paymentMethod) =>
+        sessionDepositTransactions.Count(t => t.PaymentMethod.Equals(paymentMethod, StringComparison.OrdinalIgnoreCase));
+
+    private decimal SessionTotal(string paymentMethod) =>
+        sessionDepositTransactions.Where(t => t.PaymentMethod.Equals(paymentMethod, StringComparison.OrdinalIgnoreCase)).Sum(t => t.Amount);
+
+    private IReadOnlyList<SessionDepositAccountSummary> BuildSessionDepositAccountGroups() =>
+        sessionDepositTransactions
+            .GroupBy(t => new { t.AccountId, t.AccountName })
+            .OrderBy(group => group.Key.AccountName)
+            .Select(group =>
+            {
+                var items = group.ToList();
+                var cash = items.Where(t => t.PaymentMethod.Equals("Efectivo", StringComparison.OrdinalIgnoreCase)).ToList();
+                var checks = items.Where(t => t.PaymentMethod.Equals("Cheque", StringComparison.OrdinalIgnoreCase)).ToList();
+                return new SessionDepositAccountSummary(
+                    group.Key.AccountId,
+                    group.Key.AccountName,
+                    cash.Count,
+                    cash.Sum(t => t.Amount),
+                    checks.Count,
+                    checks.Sum(t => t.Amount),
+                    items.Count,
+                    items.Sum(t => t.Amount),
+                    items.Select(t => t.Id).Distinct().ToArray());
+            })
+            .ToList();
+
+    private static string Money(decimal value) => value.ToString("C2");
+
+    private static string MemberNameDisplay(IncomeTransaction transaction) =>
+        string.IsNullOrWhiteSpace(transaction.MemberName) ? "Sin miembro" : transaction.MemberName;
+
+    private string StatusButtonClass(string value) =>
+        statusFilter == value ? "selected" : string.Empty;
+
+    private string? GetRouteHint()
+    {
+        var subcategory = lookups.Subcategories.FirstOrDefault(s => s.Id == entry.SubcategoryId)?.Name;
+        if (string.IsNullOrWhiteSpace(subcategory) || entry.Id > 0)
+        {
+            return null;
+        }
+
+        if (subcategory.Contains("ahorro", StringComparison.OrdinalIgnoreCase) ||
+            subcategory.Contains("bldg", StringComparison.OrdinalIgnoreCase) ||
+            subcategory.Contains("building", StringComparison.OrdinalIgnoreCase) ||
+            subcategory.Contains("fund", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Al guardar, esta subcategoría se asignará a Ahorros-8698 aunque otra cuenta esté seleccionada.";
+        }
+
+        if (subcategory.Contains("mision", StringComparison.OrdinalIgnoreCase) ||
+            subcategory.Contains("mission", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Al guardar, esta subcategoría se asignará a Misiones-9012 aunque otra cuenta esté seleccionada.";
+        }
+
+        return null;
+    }
+
+    private static string LockedReason(IncomeTransaction transaction)
+    {
+        if (transaction.IsVoided) return "Este ingreso ya fue anulado.";
+        if (transaction.IsReconciled) return "Este ingreso ya fue conciliado.";
+        if (transaction.IsDeposited) return "Este ingreso ya fue incluido en un depósito.";
+        return "Este ingreso no se puede editar.";
+    }
+
+    private sealed record SessionDepositAccountSummary(
+        int AccountId,
+        string AccountName,
+        int CashCount,
+        decimal CashTotal,
+        int CheckCount,
+        decimal CheckTotal,
+        int ItemCount,
+        decimal Total,
+        int[] TransactionIds);
+}

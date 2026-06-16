@@ -1,0 +1,545 @@
+@page "/reportes"
+@rendermode InteractiveServer
+@inject IReportRepository ReportRepository
+@inject ISubscriptionService SubscriptionService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<PageTitle>Fidelis Reportes</PageTitle>
+
+<div class="reports-page">
+    <div class="report-filter-bar">
+        <a class="report-back-link" href="/">‹ Back to standard reports</a>
+
+        <div class="report-filter-grid">
+            <div class="field">
+                <label>Report</label>
+                <InputSelect class="form-select compact-control" @bind-Value="selectedReportKey" @bind-Value:after="LoadReportAsync">
+                    @foreach (var item in catalog)
+                    {
+                        <option value="@item.Key">@item.Name</option>
+                    }
+                </InputSelect>
+            </div>
+
+            <div class="field">
+                <label>Cuenta bancaria</label>
+                <InputSelect class="form-select compact-control" @bind-Value="selectedAccountId" @bind-Value:after="LoadReportAsync">
+                    <option value="">Todas las cuentas</option>
+                    @foreach (var account in bankAccounts)
+                    {
+                        <option value="@account.Id">@account.Name</option>
+                    }
+                </InputSelect>
+            </div>
+
+            <div class="field">
+                <label>Report period</label>
+                <InputSelect class="form-select compact-control" @bind-Value="selectedPeriod" @bind-Value:after="ApplyReportPeriodAsync">
+                    <option value="this-month">This month</option>
+                    <option value="last-month">Last month</option>
+                    <option value="this-year">This year</option>
+                    <option value="custom">Custom dates</option>
+                </InputSelect>
+            </div>
+
+            <div class="field">
+                <label>From</label>
+                <InputDate class="form-control compact-control" @bind-Value="startDate" @bind-Value:after="UseCustomPeriod" />
+            </div>
+
+            <div class="field">
+                <label>To</label>
+                <InputDate class="form-control compact-control" @bind-Value="endDate" @bind-Value:after="UseCustomPeriod" />
+            </div>
+
+            <div class="field">
+                <label>Accounting method</label>
+                <select class="form-select compact-control" disabled>
+                    <option>Cash</option>
+                </select>
+            </div>
+
+            <div class="field">
+                <label>Display columns by</label>
+                <select class="form-select compact-control" disabled>
+                    <option>Total only</option>
+                </select>
+            </div>
+
+            <div class="field">
+                <label>Compare to</label>
+                <select class="form-select compact-control" disabled>
+                    <option>Select Period</option>
+                </select>
+            </div>
+
+            <button class="btn btn-primary compact-run" @onclick="LoadReportAsync" disabled="@isLoading">
+                @(isLoading ? "Corriendo..." : "Run report")
+            </button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(statusMessage))
+    {
+        <div class="alert @statusCss" role="alert">@statusMessage</div>
+    }
+
+    @if (isLoading && report is null)
+    {
+        <div class="status-panel">Cargando reportes...</div>
+    }
+    else if (report is not null)
+    {
+        <section class="report-viewer">
+            <div class="report-paper" id="printable-report">
+                <div class="report-paper-toolbar">
+                    <button type="button" class="report-view-mode">Compact⌄</button>
+                    <div class="report-actions">
+                        <button type="button" title="Actualizar" @onclick="LoadReportAsync">↻</button>
+                        <button type="button" title="Email" disabled>✉</button>
+                        <button type="button" title="Imprimir" @onclick="OpenPrintDialog">@PrintIcon</button>
+                        <button type="button" title="Guardar PDF" @onclick="OpenPrintDialog">@DownloadIcon</button>
+                        <button type="button" title="Más opciones" disabled>⋮</button>
+                        @if (hasAiInsights)
+                        {
+                            <button type="button" class="insights-toggle" title="Ver insights" @onclick="ToggleInsights">
+                                ✦ @report.Insights.Count Insights
+                            </button>
+                        }
+                        @if (hasAiAdvisor)
+                        {
+                            <button type="button" class="ask-ai">Ask a question <span>BETA</span></button>
+                        }
+                    </div>
+                </div>
+
+                <div class="report-title">
+                    <h2>Iglesia Cristiana Pentecostes Inc</h2>
+                    <span>@report.Title</span>
+                    @if (!string.IsNullOrWhiteSpace(SelectedAccountName))
+                    {
+                        <small>@SelectedAccountName</small>
+                    }
+                    <small>@DisplayPeriod</small>
+                </div>
+
+                <div class="report-table">
+                    <div class="report-column-header">
+                        <span></span>
+                        <strong>Total</strong>
+                    </div>
+
+                    @foreach (var reportSection in report.Sections)
+                    {
+                        <div class="report-section">
+                            <button type="button" class="report-section-row" @onclick="() => ToggleSection(reportSection.Name)">
+                                <span>@(collapsedSections.Contains(reportSection.Name) ? "›" : "⌄") @reportSection.Name</span>
+                                <strong></strong>
+                            </button>
+
+                            @if (!collapsedSections.Contains(reportSection.Name))
+                            {
+                                @foreach (var line in reportSection.Lines)
+                                {
+                                    <div class="report-line @(line.IsTotal ? "total" : "") level-@line.Level">
+                                        <span>@line.Label</span>
+                                        <div>
+                                            @if (line.HasInsight)
+                                            {
+                                                <button class="insight-dot" title="Ver insight" @onclick="() => SelectInsight(line.Key)">✦</button>
+                                            }
+                                            <strong>@Money(line.Amount)</strong>
+                                        </div>
+                                    </div>
+                                }
+                            }
+
+                            @if (reportSection.Name == "Income" && report.Key is "profit-loss" or "profit-loss-detail")
+                            {
+                                <div class="report-line gross-profit">
+                                    <span>Gross Profit</span>
+                                    <div>
+                                        @if (report.Insights.Any(i => i.LineKey == "GrossProfit"))
+                                        {
+                                            <button class="insight-dot" title="Ver insight" @onclick='() => SelectInsight("GrossProfit")'>✦</button>
+                                        }
+                                        <strong>@Money(report.TotalIncome)</strong>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    @if (report.Key is "profit-loss" or "profit-loss-detail")
+                    {
+                        <div class="report-line subtotal">
+                            <span>Net Operating Income</span>
+                            <strong>@Money(report.NetIncome)</strong>
+                        </div>
+                    }
+
+                    <div class="report-line grand-total">
+                        <span>@(report.Key.StartsWith("balance", StringComparison.OrdinalIgnoreCase) ? "Total Assets" : "Net Income")</span>
+                        <div>
+                            @if (report.Insights.Any(i => i.LineKey == "NetIncome"))
+                            {
+                                <button class="insight-dot" title="Ver insight" @onclick='() => SelectInsight("NetIncome")'>✦</button>
+                            }
+                            <strong>@Money(report.NetIncome)</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="report-footer">
+                    <span>Add note</span>
+                    <span>Cash basis</span>
+                    <span>@DateTime.Now.ToString("dddd, MMMM d, yyyy h:mm tt")</span>
+                </div>
+            </div>
+
+            @if (showInsights && hasAiInsights)
+            {
+                <aside class="insights-panel">
+                    <div class="insight-detail-header">
+                        <button type="button" @onclick="() => selectedInsight = null">‹ View all insights</button>
+                        <button type="button" title="Cerrar" @onclick="ToggleInsights">×</button>
+                    </div>
+
+                    @if (selectedInsight is not null)
+                    {
+                        <div class="insight-detail">
+                            <div class="insight-detail-title">
+                                <div>
+                                    <h2>@selectedInsight.Title</h2>
+                                    <span>15h ago</span>
+                                </div>
+                                <button type="button">✓ Resolve</button>
+                            </div>
+
+                            <div class="insight-change @(selectedInsight.Severity == "Warning" ? "down" : "up")">
+                                <span>@(selectedInsight.Severity == "Warning" ? "↓" : "↑")</span>
+                                <strong>@SelectedChangePercent</strong>
+                            </div>
+
+                            <p>@selectedInsight.Summary</p>
+
+                            <div class="insight-impact-card">
+                                <div>
+                                    <span>Línea evaluada</span>
+                                    <strong>@SelectedLineLabel</strong>
+                                </div>
+                                <div>
+                                    <span>Impacto</span>
+                                    <strong>@SelectedImpactAmount</strong>
+                                </div>
+                                <div>
+                                    <span>Peso relativo</span>
+                                    <strong>@SelectedImpactPercent</strong>
+                                </div>
+                                <div class="impact-meter" aria-label="Peso relativo del insight">
+                                    <span style="width: @SelectedImpactWidth"></span>
+                                </div>
+                            </div>
+
+                            <h3>Root cause</h3>
+                            <ul>
+                                <li>@SelectedRootCause</li>
+                            </ul>
+
+                            <div class="insight-feedback">
+                                <strong>Feedback</strong>
+                                <span>Was this helpful?</span>
+                                <button type="button">♡</button>
+                                <button type="button">⌁</button>
+                            </div>
+                        </div>
+                    }
+                    else if (report.Insights.Count > 0)
+                    {
+                        <div class="insights-list">
+                            @foreach (var insight in report.Insights)
+                            {
+                                <button class="insight-card @(selectedInsight?.LineKey == insight.LineKey ? "selected" : "")" @onclick="() => SelectInsight(insight)">
+                                    <span>@insight.Severity</span>
+                                    <strong>@insight.Title</strong>
+                                    <small>@insight.Summary</small>
+                                </button>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="empty-insights">No hay insights para este reporte.</div>
+                    }
+                </aside>
+            }
+        </section>
+    }
+
+    @if (showPrintDialog && report is not null)
+    {
+        <div class="report-print-modal-backdrop">
+            <section class="report-print-modal" role="dialog" aria-modal="true" aria-labelledby="print-title">
+                <header class="report-print-modal-header">
+                    <div>
+                        <h2 id="print-title">Print or save as PDF</h2>
+                        <p>To print, right-click the preview and select Print. Or, click the Print icon if you see one below.</p>
+                    </div>
+                    <button type="button" title="Cerrar" @onclick="ClosePrintDialog">×</button>
+                </header>
+
+                <div class="report-print-modal-body">
+                    <aside class="report-print-settings">
+                        <h3>Report Print Settings</h3>
+
+                        <div class="field">
+                            <label>Orientation</label>
+                            <select class="form-select">
+                                <option>Portrait</option>
+                            </select>
+                        </div>
+
+                        <div class="field">
+                            <label>Scaling</label>
+                            <select class="form-select">
+                                <option>Smart page break</option>
+                            </select>
+                        </div>
+
+                        <label class="report-print-check">
+                            <input type="checkbox" checked />
+                            <span>Show report headers on all pages</span>
+                        </label>
+                    </aside>
+
+                    <section class="report-print-preview">
+                        <iframe title="Vista previa PDF" src="@PrintUrl"></iframe>
+                    </section>
+                </div>
+
+                <footer class="report-print-modal-footer">
+                    <a class="btn btn-outline-success" target="_blank" href="@PrintUrl">Open PDF View</a>
+                    <a class="btn btn-primary" target="_blank" href="@PrintUrl">Print</a>
+                </footer>
+            </section>
+        </div>
+    }
+</div>
+
+@code {
+    private IReadOnlyList<ReportDefinition> catalog = [];
+    private IReadOnlyList<ReportBankAccount> bankAccounts = [];
+    private FinancialReport? report;
+    private ReportInsight? selectedInsight;
+    private HashSet<string> collapsedSections = [];
+    private string selectedReportKey = "profit-loss";
+    private string selectedPeriod = "this-year";
+    private int? selectedAccountId;
+    private DateTime startDate = new(DateTime.Today.Year, 1, 1);
+    private DateTime endDate = DateTime.Today;
+    private string? statusMessage;
+    private string statusCss = "alert-info";
+    private bool isLoading = true;
+    private bool showInsights = true;
+    private bool showPrintDialog;
+    private bool hasAiInsights = true;
+    private bool hasAiAdvisor;
+
+    private MarkupString PrintIcon => new("""
+        <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 9V2h12v7" />
+            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+            <path d="M6 14h12v8H6z" />
+        </svg>
+        """);
+
+    private MarkupString DownloadIcon => new("""
+        <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <path d="M7 10l5 5 5-5" />
+            <path d="M12 15V3" />
+        </svg>
+        """);
+
+    private string SelectedRootCause => selectedInsight is null
+        ? "No hay insight seleccionado."
+        : selectedInsight.RootCause ?? $"{selectedInsight.Title} está asociado a una línea relevante del periodo.";
+
+    private string SelectedLineLabel => selectedInsight is null
+        ? "Sin línea"
+        : FindLineLabel(selectedInsight.LineKey) ?? selectedInsight.LineKey;
+
+    private string SelectedImpactAmount => selectedInsight?.ImpactAmount is decimal amount
+        ? Money(amount)
+        : "No calculado";
+
+    private string SelectedImpactPercent => selectedInsight?.ImpactPercent is decimal percent
+        ? percent.ToString("P0")
+        : "No aplica";
+
+    private string SelectedChangePercent => selectedInsight?.ImpactPercent is decimal percent
+        ? Math.Abs(percent).ToString("P0")
+        : "N/A";
+
+    private string SelectedImpactWidth => selectedInsight?.ImpactPercent is decimal percent
+        ? $"{Math.Clamp(percent, 0m, 1m) * 100m:0}%"
+        : "0%";
+
+    private string DisplayPeriod => startDate.Year == endDate.Year && startDate.Month == endDate.Month && startDate.Day == 1 && endDate.Day == DateTime.DaysInMonth(endDate.Year, endDate.Month)
+        ? startDate.ToString("MMMM yyyy", System.Globalization.CultureInfo.InvariantCulture)
+        : report?.PeriodLabel ?? string.Empty;
+
+    private string PrintUrl =>
+        $"reportes/imprimir?type={Uri.EscapeDataString(selectedReportKey)}&start={startDate:yyyy-MM-dd}&end={endDate:yyyy-MM-dd}{PrintAccountQuery}";
+
+    private string PrintAccountQuery => selectedAccountId.HasValue
+        ? $"&accountId={selectedAccountId.Value}"
+        : string.Empty;
+
+    private string? SelectedAccountName => selectedAccountId.HasValue
+        ? bankAccounts.FirstOrDefault(account => account.Id == selectedAccountId.Value)?.Name
+        : "Todas las cuentas";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            hasAiInsights = await SubscriptionService.HasFeatureAsync(authState.User, CfsFeatures.AiInsights);
+            hasAiAdvisor = await SubscriptionService.HasFeatureAsync(authState.User, CfsFeatures.AiAdvisor);
+            catalog = await ReportRepository.GetCatalogAsync();
+            bankAccounts = await ReportRepository.GetBankAccountsAsync();
+            selectedAccountId = bankAccounts.FirstOrDefault(account =>
+                account.Name.Contains("Checking-6163", StringComparison.OrdinalIgnoreCase))?.Id;
+            selectedReportKey = catalog.FirstOrDefault()?.Key ?? selectedReportKey;
+            await LoadReportAsync();
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"No se pudo cargar reportes: {FriendlyError(ex)}", "alert-danger");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task ApplyReportPeriodAsync()
+    {
+        var today = DateTime.Today;
+        switch (selectedPeriod)
+        {
+            case "this-month":
+                startDate = new DateTime(today.Year, today.Month, 1);
+                endDate = startDate.AddMonths(1).AddDays(-1);
+                break;
+            case "last-month":
+                startDate = new DateTime(today.Year, today.Month, 1).AddMonths(-1);
+                endDate = startDate.AddMonths(1).AddDays(-1);
+                break;
+            case "this-year":
+                startDate = new DateTime(today.Year, 1, 1);
+                endDate = today;
+                break;
+        }
+
+        await LoadReportAsync();
+    }
+
+    private void UseCustomPeriod()
+    {
+        selectedPeriod = "custom";
+    }
+
+    private async Task LoadReportAsync()
+    {
+        if (endDate < startDate)
+        {
+            SetStatus("La fecha final no puede ser menor que la fecha inicial.", "alert-warning");
+            return;
+        }
+
+        isLoading = true;
+        statusMessage = null;
+        collapsedSections.Clear();
+
+        try
+        {
+            report = await ReportRepository.GetReportAsync(new ReportRequest(selectedReportKey, startDate, endDate, selectedAccountId));
+            selectedInsight = report.Insights.FirstOrDefault();
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"No se pudo correr el reporte: {FriendlyError(ex)}", "alert-danger");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void ToggleSection(string section)
+    {
+        if (!collapsedSections.Add(section))
+        {
+            collapsedSections.Remove(section);
+        }
+    }
+
+    private void SelectInsight(string lineKey)
+    {
+        selectedInsight = report?.Insights.FirstOrDefault(i => i.LineKey == lineKey);
+        showInsights = true;
+    }
+
+    private void SelectInsight(ReportInsight insight)
+    {
+        selectedInsight = insight;
+    }
+
+    private string? FindLineLabel(string lineKey)
+    {
+        if (lineKey == "GrossProfit")
+        {
+            return "Gross Profit";
+        }
+
+        if (lineKey == "NetIncome")
+        {
+            return report?.Key.StartsWith("balance", StringComparison.OrdinalIgnoreCase) == true ? "Total Assets" : "Net Income";
+        }
+
+        return report?.Sections
+            .SelectMany(section => section.Lines)
+            .FirstOrDefault(line => line.Key == lineKey)
+            ?.Label;
+    }
+
+    private void ToggleInsights()
+    {
+        showInsights = !showInsights;
+    }
+
+    private void OpenPrintDialog()
+    {
+        showPrintDialog = true;
+    }
+
+    private void ClosePrintDialog()
+    {
+        showPrintDialog = false;
+    }
+
+    private void SetStatus(string message, string css)
+    {
+        statusMessage = message;
+        statusCss = css;
+    }
+
+    private static string FriendlyError(Exception ex) =>
+        ex.Message.Contains("NombreCategoria", StringComparison.OrdinalIgnoreCase)
+            ? "falta confirmar el nombre de columna de categorias en la base de datos."
+            : ex.Message;
+
+    private static string Money(decimal value) => value.ToString("C2");
+}

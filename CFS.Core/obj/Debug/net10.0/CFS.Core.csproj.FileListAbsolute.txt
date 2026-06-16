@@ -1,0 +1,14 @@
+C:\Users\aruiz\Documents\Codex\2026-05-08\files-mentioned-by-the-user-finanzasiglesia\CFS.Core\bin\Debug\net10.0\CFS.Core.deps.json
+C:\Users\aruiz\Documents\Codex\2026-05-08\files-mentioned-by-the-user-finanzasiglesia\CFS.Core\bin\Debug\net10.0\CFS.Core.dll
+C:\Users\aruiz\Documents\Codex\2026-05-08\files-mentioned-by-the-user-finanzasiglesia\CFS.Core\bin\Debug\net10.0\CFS.Core.pdb
+C:\Users\aruiz\Documents\Codex\2026-05-08\files-mentioned-by-the-user-finanzasiglesia\CFS.Core\obj\Debug\net10.0\CFS.Core.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\aruiz\Documents\Codex\2026-05-08\files-mentioned-by-the-user-finanzasiglesia\CFS.Core\obj\Debug\net10.0\CFS.Core.AssemblyInfoInputs.cache
+C:\Users\aruiz\Documents\Codex\2026-05-08\files-mentioned-by-the-user-finanzasiglesia\CFS.Core\obj\Debug\net10.0\CFS.Core.AssemblyInfo.cs
+C:\Users\aruiz\Documents\Codex\2026-05-08\files-mentioned-by-the-user-finanzasiglesia\CFS.Core\obj\Debug\net10.0\CFS.Core.csproj.CoreCompileInputs.cache
+C:\Users\aruiz\Documents\Codex\2026-05-08\files-mentioned-by-the-user-finanzasiglesia\CFS.Core\obj\Debug\net10.0\CFS.Core.dll
+C:\Users\aruiz\Documents\Codex\2026-05-08\files-mentioned-by-the-user-finanzasiglesia\CFS.Core\obj\Debug\net10.0\refint\CFS.Core.dll
+C:\Users\aruiz\Documents\Codex\2026-05-08\files-mentioned-by-the-user-finanzasiglesia\CFS.Core\obj\Debug\net10.0\CFS.Core.pdb
+C:\Users\aruiz\Documents\Codex\2026-05-08\files-mentioned-by-the-user-finanzasiglesia\CFS.Core\obj\Debug\net10.0\ref\CFS.Core.dll
+C:\Users\aruiz\Documents\Codex\2026-05-08\files-mentioned-by-the-user-finanzasiglesia\artifacts\verify\CFS.Core.deps.json
+C:\Users\aruiz\Documents\Codex\2026-05-08\files-mentioned-by-the-user-finanzasiglesia\artifacts\verify\CFS.Core.dll
+C:\Users\aruiz\Documents\Codex\2026-05-08\files-mentioned-by-the-user-finanzasiglesia\artifacts\verify\CFS.Core.pdb

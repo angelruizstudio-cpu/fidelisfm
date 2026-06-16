@@ -1,0 +1,145 @@
+@page "/reportes/imprimir"
+@layout PrintLayout
+@inject IReportRepository ReportRepository
+
+<PageTitle>Fidelis Reporte PDF</PageTitle>
+
+@if (isLoading)
+{
+    <div class="status-panel">Cargando reporte...</div>
+}
+else if (!string.IsNullOrWhiteSpace(errorMessage))
+{
+    <div class="alert alert-danger">@errorMessage</div>
+}
+else if (report is not null)
+{
+    <div class="print-toolbar report-print-toolbar">
+        <a class="btn btn-outline-secondary" href="reportes">Volver</a>
+        <button class="btn btn-primary" type="button" onclick="window.print()">Imprimir / Guardar PDF</button>
+        <span>Usar escala 100% / Actual size.</span>
+    </div>
+
+    <article class="formal-report-sheet">
+        <header class="formal-report-header">
+            <h1>Iglesia Cristiana Pentecostes Inc</h1>
+            <span>@report.Title</span>
+            @if (!string.IsNullOrWhiteSpace(SelectedAccountName))
+            {
+                <small>@SelectedAccountName</small>
+            }
+            <small>@DisplayPeriod</small>
+        </header>
+
+        <section class="formal-report-table">
+            <div class="formal-report-column-header">
+                <span></span>
+                <strong>Total</strong>
+            </div>
+
+            @foreach (var reportSection in report.Sections)
+            {
+                <div class="formal-section-row">
+                    <span>⌄ @reportSection.Name</span>
+                    <strong></strong>
+                </div>
+
+                @foreach (var line in reportSection.Lines)
+                {
+                    <div class="formal-report-line @(line.IsTotal ? "total" : "") level-@line.Level">
+                        <span>@line.Label</span>
+                        <strong>@Money(line.Amount)</strong>
+                    </div>
+                }
+
+                @if (reportSection.Name == "Income" && report.Key is "profit-loss" or "profit-loss-detail")
+                {
+                    <div class="formal-report-line gross-profit">
+                        <span>Gross Profit</span>
+                        <strong>@Money(report.TotalIncome)</strong>
+                    </div>
+                }
+            }
+
+            @if (report.Key is "profit-loss" or "profit-loss-detail")
+            {
+                <div class="formal-report-line subtotal">
+                    <span>Net Operating Income</span>
+                    <strong>@Money(report.NetIncome)</strong>
+                </div>
+            }
+
+            <div class="formal-report-line grand-total">
+                <span>@(report.Key.StartsWith("balance", StringComparison.OrdinalIgnoreCase) ? "Total Assets" : "Net Income")</span>
+                <strong>@Money(report.NetIncome)</strong>
+            </div>
+        </section>
+
+        <section class="formal-signatures">
+            <div>
+                <span></span>
+                <strong>Firma del Pastor</strong>
+            </div>
+            <div>
+                <span></span>
+                <strong>Firma de Tesorería</strong>
+            </div>
+        </section>
+
+        <footer class="formal-report-footer">
+            <span>Preparado por Fidelis Financial Management</span>
+            <span>Método: Cash basis</span>
+            <span>Emitido: @DateTime.Now.ToString("MM/dd/yyyy h:mm tt")</span>
+        </footer>
+    </article>
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "type")]
+    public string? Type { get; set; }
+
+    [SupplyParameterFromQuery(Name = "start")]
+    public DateTime? Start { get; set; }
+
+    [SupplyParameterFromQuery(Name = "end")]
+    public DateTime? End { get; set; }
+
+    [SupplyParameterFromQuery(Name = "accountId")]
+    public int? AccountId { get; set; }
+
+    private IReadOnlyList<ReportBankAccount> bankAccounts = [];
+    private FinancialReport? report;
+    private string? errorMessage;
+    private bool isLoading = true;
+
+    private DateTime StartDate => Start?.Date ?? new DateTime(DateTime.Today.Year, 1, 1);
+    private DateTime EndDate => End?.Date ?? DateTime.Today;
+    private string ReportType => string.IsNullOrWhiteSpace(Type) ? "profit-loss" : Type;
+
+    private string? SelectedAccountName => AccountId.HasValue
+        ? bankAccounts.FirstOrDefault(account => account.Id == AccountId.Value)?.Name
+        : "Todas las cuentas";
+
+    private string DisplayPeriod => StartDate.Year == EndDate.Year && StartDate.Month == EndDate.Month && StartDate.Day == 1 && EndDate.Day == DateTime.DaysInMonth(EndDate.Year, EndDate.Month)
+        ? StartDate.ToString("MMMM yyyy", System.Globalization.CultureInfo.InvariantCulture)
+        : report?.PeriodLabel ?? string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            bankAccounts = await ReportRepository.GetBankAccountsAsync();
+            report = await ReportRepository.GetReportAsync(new ReportRequest(ReportType, StartDate, EndDate, AccountId));
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private static string Money(decimal value) => value.ToString("C2");
+}
