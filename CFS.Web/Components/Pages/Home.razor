@@ -2,6 +2,10 @@
 @layout LoginLayout
 @attribute [AllowAnonymous]
 @using Microsoft.AspNetCore.Authorization
+@using CFS.Core.Models
+@using CFS.Core.Services
+@inject NavigationManager Navigation
+@inject IStripeCheckoutService StripeCheckout
 
 <PageTitle>Fidelis Financial Management</PageTitle>
 
@@ -200,12 +204,16 @@
                         {
                             <h3>Pago</h3>
                             <p class="checkout-pending">
-                                La integración de pago con tarjeta (Stripe) se conecta en el siguiente paso del proyecto.
-                                Por ahora tu solicitud queda registrada con el plan y los datos de cuenta capturados.
+                                Serás redirigido a Stripe para completar tu pago de forma segura.
                             </p>
-                            <div id="stripe-payment-element" class="stripe-placeholder"></div>
-                            <button type="button" class="btn btn-outline-secondary" @onclick="() => checkoutStep = 2">Atrás</button>
-                            <button type="button" class="btn btn-primary" disabled>Pagar (próximamente)</button>
+                            @if (checkoutError is not null)
+                            {
+                                <p class="checkout-error">@checkoutError</p>
+                            }
+                            <button type="button" class="btn btn-outline-secondary" @onclick="() => checkoutStep = 2" disabled="@isRedirectingToStripe">Atrás</button>
+                            <button type="button" class="btn btn-primary" @onclick="StartStripeCheckoutAsync" disabled="@isRedirectingToStripe">
+                                @(isRedirectingToStripe ? "Redirigiendo..." : "Pagar con Stripe")
+                            </button>
                         }
                     </div>
 
@@ -239,6 +247,8 @@
     private PricingPlan? selectedPlan;
     private int checkoutStep = 1;
     private readonly CheckoutAccount account = new();
+    private bool isRedirectingToStripe;
+    private string? checkoutError;
 
     private const decimal AnnualDiscount = 0.10m;
 
@@ -254,7 +264,48 @@
     {
         selectedPlan = null;
         checkoutStep = 1;
+        checkoutError = null;
     }
+
+    private async Task StartStripeCheckoutAsync()
+    {
+        if (selectedPlan is null || isRedirectingToStripe)
+        {
+            return;
+        }
+
+        isRedirectingToStripe = true;
+        checkoutError = null;
+
+        try
+        {
+            var baseUri = Navigation.BaseUri.TrimEnd('/');
+            var request = new CheckoutSessionRequest(
+                PlanKeyFor(selectedPlan),
+                billingCycle.ToString(),
+                account.OrganizationName,
+                account.Email,
+                account.Phone,
+                $"{baseUri}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}",
+                $"{baseUri}/?checkout=cancelled");
+
+            var url = await StripeCheckout.CreateCheckoutSessionUrlAsync(request);
+            Navigation.NavigateTo(url, forceLoad: true);
+        }
+        catch (Exception)
+        {
+            checkoutError = "No pudimos iniciar el pago. Intenta de nuevo en un momento.";
+            isRedirectingToStripe = false;
+        }
+    }
+
+    private static string PlanKeyFor(PricingPlan plan) => plan.Name switch
+    {
+        "Básico" => CfsPlans.Basic,
+        "Standard" => CfsPlans.Standard,
+        "Pro" => CfsPlans.Pro,
+        _ => CfsPlans.Basic,
+    };
 
     private static string FormatPrice(PricingPlan? plan, BillingCycle cycle)
     {

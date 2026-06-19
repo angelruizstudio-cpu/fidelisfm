@@ -35,12 +35,14 @@ builder.Services.AddAuthorization();
 builder.Services.AddScoped<ITenantContext, HttpTenantContext>();
 builder.Services.AddScoped<ISubscriptionService, StaticSubscriptionService>();
 builder.Services.AddHttpClient<IAiAdvisorService, OpenAiAdvisorService>();
+builder.Services.AddScoped<IStripeCheckoutService, StripeCheckoutService>();
 
 var demoEnabled = builder.Configuration.GetValue("Demo:Enabled", false);
 if (demoEnabled)
 {
     builder.Services.AddScoped<IAiUsageLimiter, DemoAiUsageLimiter>();
     builder.Services.AddScoped<IOrganizationLabelService, DemoOrganizationLabelService>();
+    builder.Services.AddScoped<ISignupRepository, DemoSignupRepository>();
     builder.Services.AddScoped<IDashboardRepository, DemoDashboardRepository>();
     builder.Services.AddScoped<IUserAuthenticationRepository, DemoUserAuthenticationRepository>();
     builder.Services.AddScoped<IIncomeRepository, DemoIncomeRepository>();
@@ -57,6 +59,7 @@ else
         new SqlConnectionFactory(builder.Configuration.GetConnectionString("CfsDatabase") ?? string.Empty));
     builder.Services.AddScoped<IAiUsageLimiter, SqlAiUsageLimiter>();
     builder.Services.AddScoped<IOrganizationLabelService, SqlOrganizationLabelService>();
+    builder.Services.AddScoped<ISignupRepository, SqlSignupRepository>();
     builder.Services.AddScoped<IDashboardRepository, SqlDashboardRepository>();
     builder.Services.AddScoped<IUserAuthenticationRepository, SqlUserAuthenticationRepository>();
     builder.Services.AddScoped<IIncomeRepository, SqlIncomeRepository>();
@@ -90,6 +93,48 @@ app.MapGet("/logout", async (HttpContext httpContext) =>
     await httpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
     return Results.Redirect("/login");
 }).RequireAuthorization();
+
+app.MapPost("/api/stripe/webhook", async (HttpRequest request, IConfiguration config, ISignupRepository signups, ILoggerFactory loggerFactory) =>
+{
+    var logger = loggerFactory.CreateLogger("StripeWebhook");
+    var json = await new StreamReader(request.Body).ReadToEndAsync();
+    var webhookSecret = config["STRIPE_WEBHOOK_SECRET"];
+
+    Stripe.Event stripeEvent;
+    try
+    {
+        if (string.IsNullOrWhiteSpace(webhookSecret))
+        {
+            logger.LogWarning("STRIPE_WEBHOOK_SECRET is not configured; accepting event without signature verification.");
+            stripeEvent = Stripe.EventUtility.ParseEvent(json);
+        }
+        else
+        {
+            stripeEvent = Stripe.EventUtility.ConstructEvent(json, request.Headers["Stripe-Signature"], webhookSecret);
+        }
+    }
+    catch (Stripe.StripeException ex)
+    {
+        logger.LogWarning(ex, "Stripe webhook signature verification failed.");
+        return Results.BadRequest();
+    }
+
+    if (stripeEvent.Type == "checkout.session.completed" &&
+        stripeEvent.Data.Object is Stripe.Checkout.Session session)
+    {
+        var metadata = session.Metadata ?? new Dictionary<string, string>();
+        await signups.RecordPendingSignupAsync(new PendingSignup(
+            metadata.GetValueOrDefault("OrganizationName", ""),
+            session.CustomerDetails?.Email ?? metadata.GetValueOrDefault("Email", ""),
+            metadata.GetValueOrDefault("Phone", ""),
+            metadata.GetValueOrDefault("PlanKey", ""),
+            metadata.GetValueOrDefault("BillingCycle", ""),
+            session.Id,
+            session.CustomerId), request.HttpContext.RequestAborted);
+    }
+
+    return Results.Ok();
+}).AllowAnonymous();
 
 if (demoEnabled)
 {

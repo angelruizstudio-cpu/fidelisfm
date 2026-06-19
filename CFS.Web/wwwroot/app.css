@@ -732,6 +732,29 @@
     margin-top: 12px;
 }
 
+.checkout-error {
+    color: #c0392b;
+    font-size: .85rem;
+    margin: 8px 0;
+}
+
+.checkout-success-page {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 24px;
+}
+
+.checkout-success-card {
+    max-width: 480px;
+    text-align: center;
+    background: #fff;
+    border-radius: 16px;
+    padding: 40px 32px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, .08);
+}
+
 @media (max-width: 760px) {
     .checkout-body {
         grid-template-columns: 1fr;
