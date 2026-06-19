@@ -29,6 +29,23 @@ public static class CfsPlans
     public const string MultiChurch = "multi_church";
 }
 
+public static class CfsAiQuotas
+{
+    /// <summary>
+    /// Maximum number of AI assistant questions a tenant may ask per calendar month, by plan.
+    /// Keeps OpenAI API costs predictable per plan tier.
+    /// </summary>
+    public static int GetMonthlyLimit(string? planKey) => planKey?.ToLowerInvariant() switch
+    {
+        CfsPlans.Founder => int.MaxValue,
+        CfsPlans.Basic => 10,
+        CfsPlans.Standard => 50,
+        CfsPlans.Pro => 200,
+        CfsPlans.MultiChurch => 500,
+        _ => 10
+    };
+}
+
 public sealed record SubscriptionFeature(string Key, string Name, bool Enabled);
 
 public sealed record TenantSubscription(

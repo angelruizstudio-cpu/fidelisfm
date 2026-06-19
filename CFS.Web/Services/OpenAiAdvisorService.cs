@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using CFS.Core.Models;
 using CFS.Core.Services;
+using Microsoft.AspNetCore.Http;
 
 namespace CFS.Web.Services;
 
@@ -10,7 +11,9 @@ public sealed class OpenAiAdvisorService(
     HttpClient httpClient,
     IConfiguration configuration,
     IDashboardRepository dashboardRepository,
-    IReportRepository reportRepository) : IAiAdvisorService
+    IReportRepository reportRepository,
+    IAiUsageLimiter aiUsageLimiter,
+    IHttpContextAccessor httpContextAccessor) : IAiAdvisorService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -18,6 +21,24 @@ public sealed class OpenAiAdvisorService(
         AiQuestionRequest request,
         CancellationToken cancellationToken = default)
     {
+        var planKey = httpContextAccessor.HttpContext?.User?.FindFirst("PlanKey")?.Value ?? CfsPlans.Basic;
+        var usage = await aiUsageLimiter.CheckAndIncrementAsync(planKey, cancellationToken);
+        if (!usage.IsAllowed)
+        {
+            var isFounderOrMultiChurch = planKey.Equals(CfsPlans.Founder, StringComparison.OrdinalIgnoreCase) ||
+                planKey.Equals(CfsPlans.MultiChurch, StringComparison.OrdinalIgnoreCase);
+
+            var upgradeHint = isFounderOrMultiChurch
+                ? string.Empty
+                : " Considera actualizar tu plan para aumentar este límite.";
+
+            return new AiAnswer(
+                $"Has alcanzado el límite de {usage.Limit} preguntas al asistente IA para este mes en tu plan actual. " +
+                $"El contador se reinicia el primer día del próximo mes.{upgradeHint}",
+                [new AiCitation("Plan de suscripción", "Límite mensual de IA", $"{usage.Used}/{usage.Limit}")],
+                ["¿Cuál es el balance en libros por cuenta?", "Resume el Profit and Loss de este año"]);
+        }
+
         var apiKey = GetApiKey();
         if (string.IsNullOrWhiteSpace(apiKey))
         {
