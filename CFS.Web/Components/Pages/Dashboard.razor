@@ -1,6 +1,7 @@
 @page "/dashboard"
 @rendermode InteractiveServer
 @inject IDashboardRepository DashboardRepository
+@inject IOrganizationLabelService OrganizationLabelService
 
 <PageTitle>Fidelis Dashboard</PageTitle>
 
@@ -85,7 +86,7 @@ else if (snapshot is not null)
             <div class="panel-body">
                 <ul class="task-list">
                     <li>
-                        <span>Registrar diezmo u ofrenda</span>
+                        <span>Registrar @RegisterIncomeLabel</span>
                         <a href="ingresos">Abrir</a>
                     </li>
                     <li>
@@ -106,9 +107,15 @@ else if (snapshot is not null)
     private DashboardSnapshot? snapshot;
     private string? errorMessage;
     private bool isLoading = true;
+    private OrganizationLabels labels = OrganizationLabelDefaults.GetDefaults(OrganizationType.Church);
+
+    private string RegisterIncomeLabel => labels.IncomeLabel.Equals("Diezmos y Ofrendas", StringComparison.Ordinal)
+        ? "diezmo u ofrenda"
+        : labels.IncomeLabel.ToLowerInvariant();
 
     protected override async Task OnInitializedAsync()
     {
+        labels = await OrganizationLabelService.GetLabelsAsync();
         await LoadDashboardAsync();
     }
 
