@@ -4,6 +4,7 @@
 @inject IDepositRepository DepositRepository
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject NavigationManager NavigationManager
+@inject IOrganizationLabelService OrganizationLabelService
 
 <PageTitle>Fidelis Ingresos</PageTitle>
 
@@ -117,16 +118,16 @@ else
 
                 <div class="receipt-grid">
                     <div class="field">
-                        <label>Miembro / donante</label>
+                        <label>@ContactsPickerLabel</label>
                         <div class="member-picker">
                             <div class="member-picker-control">
                                 <input class="form-control compact-control"
-                                       placeholder="Seleccionar miembro / donante"
+                                       placeholder="@SelectContactsPickerPlaceholder"
                                        value="@MemberPickerText"
                                        @onfocus="OpenMemberPicker"
                                        @oninput="OnMemberSearchInput"
                                        disabled="@(!CanEditForm)" />
-                                <button class="member-picker-toggle" type="button" @onclick="ToggleMemberPicker" disabled="@(!CanEditForm)" aria-label="Abrir lista de miembros">
+                                <button class="member-picker-toggle" type="button" @onclick="ToggleMemberPicker" disabled="@(!CanEditForm)" aria-label="@OpenContactsListAriaLabel">
                                     <span>⌄</span>
                                 </button>
                             </div>
@@ -138,13 +139,13 @@ else
                                         <strong>Añadir nuevo</strong>
                                     </button>
                                     <button class="member-picker-option" type="button" @onclick="ClearMemberSelection">
-                                        <span>Sin miembro</span>
+                                        <span>@NoContactSelectedLabel</span>
                                     </button>
                                     @foreach (var member in FilteredMembers)
                                     {
                                         <button class="member-picker-option" type="button" @onclick="() => SelectMember(member)">
                                             <span>@member.Name</span>
-                                            <em>Miembro / Donante</em>
+                                            <em>@ContactsPickerOptionTag</em>
                                         </button>
                                     }
                                 </div>
@@ -279,7 +280,7 @@ else
 {
     <div class="modal-backdrop-lite">
         <div class="void-dialog member-dialog">
-            <h2>Nuevo miembro / donante</h2>
+            <h2>Nuevo @NewContactDialogLabel</h2>
             <p>Añade el contacto y quedará seleccionado en el ingreso actual.</p>
 
             @if (!string.IsNullOrWhiteSpace(memberStatusMessage))
@@ -295,7 +296,7 @@ else
             <div class="form-actions">
                 <button class="btn btn-outline-secondary" type="button" @onclick="CancelNewMemberDialog" disabled="@isSavingMember">Cancelar</button>
                 <button class="btn btn-primary" type="button" @onclick="CreateMemberAsync" disabled="@isSavingMember">
-                    @(isSavingMember ? "Guardando..." : "Guardar miembro")
+                    @(isSavingMember ? "Guardando..." : $"Guardar {ContactSingular.ToLowerInvariant()}")
                 </button>
             </div>
         </div>
@@ -384,6 +385,7 @@ else
     private bool showCloseDepositDialog;
     private bool showNewMemberDialog;
     private MemberQuickEntry newMember = new();
+    private OrganizationLabels labels = OrganizationLabelDefaults.GetDefaults(OrganizationType.Church);
 
     private string FormModeLabel => entry.Id > 0 ? "Editar recibo" : "Registrar recibo";
     private bool IsCheck => entry.PaymentMethod.Equals("Cheque", StringComparison.OrdinalIgnoreCase);
@@ -395,8 +397,20 @@ else
     private string? RouteHint => GetRouteHint();
     private string MemberPickerText => showMemberPicker ? memberSearch : selectedMemberName;
 
+    private string ContactSingular => Singularize(labels.ContactsLabel);
+    private string ContactsPickerLabel => $"{ContactSingular} / donante";
+    private string ContactsPickerOptionTag => $"{ContactSingular} / Donante";
+    private string SelectContactsPickerPlaceholder => $"Seleccionar {ContactSingular.ToLowerInvariant()} / donante";
+    private string OpenContactsListAriaLabel => $"Abrir lista de {labels.ContactsLabel.ToLowerInvariant()}";
+    private string NoContactSelectedLabel => $"Sin {ContactSingular.ToLowerInvariant()}";
+    private string NewContactDialogLabel => $"{ContactSingular.ToLowerInvariant()} / donante";
+
+    private static string Singularize(string label) =>
+        label.EndsWith('s') ? label[..^1] : label;
+
     protected override async Task OnInitializedAsync()
     {
+        labels = await OrganizationLabelService.GetLabelsAsync();
         await LoadAsync();
     }
 
