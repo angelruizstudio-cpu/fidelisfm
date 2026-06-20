@@ -7,7 +7,7 @@ namespace CFS.Web.Services;
 
 public sealed class StripeCheckoutService(IConfiguration configuration) : IStripeCheckoutService
 {
-    public async Task<string> CreateCheckoutSessionUrlAsync(CheckoutSessionRequest request, CancellationToken cancellationToken = default)
+    public async Task<CheckoutSessionResult> CreateCheckoutSessionAsync(CheckoutSessionRequest request, CancellationToken cancellationToken = default)
     {
         var secretKey = configuration["STRIPE_SECRET_KEY"]
             ?? throw new InvalidOperationException("STRIPE_SECRET_KEY is not configured.");
@@ -33,7 +33,7 @@ public sealed class StripeCheckoutService(IConfiguration configuration) : IStrip
         };
 
         var session = await service.CreateAsync(options, cancellationToken: cancellationToken);
-        return session.Url;
+        return new CheckoutSessionResult(session.Url, session.Id);
     }
 
     private string ResolvePriceId(string planKey, string billingCycle)

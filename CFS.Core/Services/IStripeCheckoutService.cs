@@ -9,11 +9,12 @@ public sealed record CheckoutSessionRequest(
     string SuccessUrl,
     string CancelUrl);
 
+public sealed record CheckoutSessionResult(string Url, string SessionId);
+
 public interface IStripeCheckoutService
 {
     /// <summary>
-    /// Creates a Stripe-hosted Checkout Session for the given plan/billing cycle and returns
-    /// the URL the browser should be redirected to in order to complete payment.
+    /// Creates a Stripe-hosted Checkout Session for the given plan/billing cycle.
     /// </summary>
-    Task<string> CreateCheckoutSessionUrlAsync(CheckoutSessionRequest request, CancellationToken cancellationToken = default);
+    Task<CheckoutSessionResult> CreateCheckoutSessionAsync(CheckoutSessionRequest request, CancellationToken cancellationToken = default);
 }

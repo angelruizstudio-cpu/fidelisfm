@@ -6,6 +6,7 @@
 @using CFS.Core.Services
 @inject NavigationManager Navigation
 @inject IStripeCheckoutService StripeCheckout
+@inject ISignupRepository Signups
 
 <PageTitle>Fidelis Financial Management</PageTitle>
 
@@ -280,8 +281,9 @@
         try
         {
             var baseUri = Navigation.BaseUri.TrimEnd('/');
+            var planKey = PlanKeyFor(selectedPlan);
             var request = new CheckoutSessionRequest(
-                PlanKeyFor(selectedPlan),
+                planKey,
                 billingCycle.ToString(),
                 account.OrganizationName,
                 account.Email,
@@ -289,8 +291,13 @@
                 $"{baseUri}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}",
                 $"{baseUri}/?checkout=cancelled");
 
-            var url = await StripeCheckout.CreateCheckoutSessionUrlAsync(request);
-            Navigation.NavigateTo(url, forceLoad: true);
+            var session = await StripeCheckout.CreateCheckoutSessionAsync(request);
+
+            await Signups.CreatePendingSignupAsync(
+                new PendingSignup(account.OrganizationName, account.Email, account.Phone, planKey, billingCycle.ToString(), session.SessionId, null),
+                account.Password);
+
+            Navigation.NavigateTo(session.Url, forceLoad: true);
         }
         catch (Exception)
         {

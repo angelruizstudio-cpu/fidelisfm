@@ -122,15 +122,11 @@ app.MapPost("/api/stripe/webhook", async (HttpRequest request, IConfiguration co
     if (stripeEvent.Type == "checkout.session.completed" &&
         stripeEvent.Data.Object is Stripe.Checkout.Session session)
     {
-        var metadata = session.Metadata ?? new Dictionary<string, string>();
-        await signups.RecordPendingSignupAsync(new PendingSignup(
-            metadata.GetValueOrDefault("OrganizationName", ""),
-            session.CustomerDetails?.Email ?? metadata.GetValueOrDefault("Email", ""),
-            metadata.GetValueOrDefault("Phone", ""),
-            metadata.GetValueOrDefault("PlanKey", ""),
-            metadata.GetValueOrDefault("BillingCycle", ""),
-            session.Id,
-            session.CustomerId), request.HttpContext.RequestAborted);
+        var tenantId = await signups.CompleteSignupAndProvisionTenantAsync(session.Id, session.CustomerId, request.HttpContext.RequestAborted);
+        if (tenantId is null)
+        {
+            logger.LogWarning("Stripe checkout.session.completed for session {SessionId} had no matching pending signup to provision.", session.Id);
+        }
     }
 
     return Results.Ok();

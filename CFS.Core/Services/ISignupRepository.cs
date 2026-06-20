@@ -12,9 +12,16 @@ public sealed record PendingSignup(
 public interface ISignupRepository
 {
     /// <summary>
-    /// Records a completed Stripe Checkout payment so it can be reviewed and provisioned into
-    /// a tenant/user account. Idempotent on StripeSessionId — replaying the same webhook event
-    /// must not create duplicate rows.
+    /// Persists a checkout attempt (with hashed password) right before the customer is redirected
+    /// to Stripe, keyed by the Stripe Checkout Session id so the webhook can find it later.
     /// </summary>
-    Task RecordPendingSignupAsync(PendingSignup signup, CancellationToken cancellationToken = default);
+    Task CreatePendingSignupAsync(PendingSignup signup, string password, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Called from the Stripe webhook once payment succeeds. Provisions a new Tenant,
+    /// TenantSubscription, and Usuario (Administrador role) from the pending signup row, then
+    /// marks it Provisioned. Idempotent — replaying the same event returns the same TenantId
+    /// without creating duplicates. Returns null if no matching pending signup is found.
+    /// </summary>
+    Task<int?> CompleteSignupAndProvisionTenantAsync(string stripeSessionId, string? stripeCustomerId, CancellationToken cancellationToken = default);
 }
