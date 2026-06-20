@@ -8,6 +8,7 @@
 @inject NavigationManager Navigation
 @inject IStripeCheckoutService StripeCheckout
 @inject ISignupRepository Signups
+@inject ILogger<Home> Logger
 
 <PageTitle>Fidelis Financial Management</PageTitle>
 
@@ -300,8 +301,9 @@
 
             Navigation.NavigateTo(session.Url, forceLoad: true);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            Logger.LogError(ex, "Stripe checkout session creation failed for plan {PlanKey}", PlanKeyFor(selectedPlan));
             checkoutError = "No pudimos iniciar el pago. Intenta de nuevo en un momento.";
             isRedirectingToStripe = false;
         }
