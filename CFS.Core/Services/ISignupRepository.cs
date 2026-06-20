@@ -9,6 +9,18 @@ public sealed record PendingSignup(
     string StripeSessionId,
     string? StripeCustomerId);
 
+public sealed record PendingSignupRecord(
+    int Id,
+    string OrganizationName,
+    string Email,
+    string PlanKey,
+    string BillingCycle,
+    string Status,
+    string StripeSessionId,
+    int? ProvisionedTenantId,
+    DateTime CreatedAt,
+    DateTime? ProvisionedAt);
+
 public interface ISignupRepository
 {
     /// <summary>
@@ -24,4 +36,9 @@ public interface ISignupRepository
     /// without creating duplicates. Returns null if no matching pending signup is found.
     /// </summary>
     Task<int?> CompleteSignupAndProvisionTenantAsync(string stripeSessionId, string? stripeCustomerId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Lists the most recent pending signups (any status) for the admin view, newest first.
+    /// </summary>
+    Task<IReadOnlyList<PendingSignupRecord>> ListRecentAsync(int take, CancellationToken cancellationToken = default);
 }

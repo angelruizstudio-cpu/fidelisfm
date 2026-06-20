@@ -9,4 +9,7 @@ public sealed class DemoSignupRepository : ISignupRepository
 
     public Task<int?> CompleteSignupAndProvisionTenantAsync(string stripeSessionId, string? stripeCustomerId, CancellationToken cancellationToken = default) =>
         Task.FromResult<int?>(null);
+
+    public Task<IReadOnlyList<PendingSignupRecord>> ListRecentAsync(int take, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<PendingSignupRecord>>([]);
 }
