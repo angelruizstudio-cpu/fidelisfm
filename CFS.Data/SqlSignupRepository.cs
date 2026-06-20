@@ -164,6 +164,42 @@ public sealed class SqlSignupRepository(SqlConnectionFactory connectionFactory) 
         }
     }
 
+    public async Task<IReadOnlyList<PendingSignupRecord>> ListRecentAsync(int take, CancellationToken cancellationToken = default)
+    {
+        await using var connection = connectionFactory.Create();
+        await connection.OpenAsync(cancellationToken);
+
+        const string sql = """
+            SELECT TOP (@take)
+                ID_PendingSignup, OrganizationName, Email, PlanKey, BillingCycle, Status,
+                StripeSessionId, ProvisionedTenantId, CreatedAt, ProvisionedAt
+            FROM dbo.PendingSignups
+            ORDER BY CreatedAt DESC;
+            """;
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.Add("@take", SqlDbType.Int).Value = take;
+
+        var results = new List<PendingSignupRecord>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(new PendingSignupRecord(
+                reader.GetInt32(reader.GetOrdinal("ID_PendingSignup")),
+                reader.GetString(reader.GetOrdinal("OrganizationName")),
+                reader.GetString(reader.GetOrdinal("Email")),
+                reader.GetString(reader.GetOrdinal("PlanKey")),
+                reader.GetString(reader.GetOrdinal("BillingCycle")),
+                reader.GetString(reader.GetOrdinal("Status")),
+                reader.GetString(reader.GetOrdinal("StripeSessionId")),
+                reader["ProvisionedTenantId"] is DBNull ? null : reader.GetInt32(reader.GetOrdinal("ProvisionedTenantId")),
+                reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
+                reader["ProvisionedAt"] is DBNull ? null : reader.GetDateTime(reader.GetOrdinal("ProvisionedAt"))));
+        }
+
+        return results;
+    }
+
     private static string Slugify(string value)
     {
         var lowered = value.Trim().ToLowerInvariant();

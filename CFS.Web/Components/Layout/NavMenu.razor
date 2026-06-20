@@ -63,16 +63,25 @@
                 Reportes
             </NavLink>
         }
+        @if (isFounderAdmin)
+        {
+            <NavLink class="nav-link" href="admin/signups">
+                <span class="nav-icon" aria-hidden="true">⚑</span>
+                Signups
+            </NavLink>
+        }
     </div>
 </nav>
 
 @code {
     private TenantSubscription? subscription;
+    private bool isFounderAdmin;
 
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         subscription = await SubscriptionService.GetCurrentAsync(authState.User);
+        isFounderAdmin = authState.User.FindFirst("TenantId")?.Value == "1" && authState.User.IsInRole("Administrador");
     }
 
     private bool HasFeature(string featureKey) =>

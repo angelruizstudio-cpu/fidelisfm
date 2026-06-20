@@ -1,0 +1,131 @@
+@page "/admin/signups"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+@using System.Security.Claims
+@using CFS.Core.Services
+@inject ISignupRepository Signups
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<PageTitle>Fidelis Admin · Signups</PageTitle>
+
+@if (!isAuthorized)
+{
+    <div class="alert alert-danger">No tienes acceso a esta página.</div>
+}
+else
+{
+    <div class="screen-header">
+        <div>
+            <p class="eyebrow">Fidelis Financial Management</p>
+            <h1>Pending Signups</h1>
+        </div>
+        <div class="quick-actions">
+            <button class="btn btn-outline-secondary" @onclick="LoadAsync" disabled="@isLoading">
+                Actualizar
+            </button>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="status-panel">Cargando...</div>
+    }
+    else if (signups.Count == 0)
+    {
+        <div class="status-panel">No hay registros de signups.</div>
+    }
+    else
+    {
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Organización</th>
+                    <th>Email</th>
+                    <th>Plan</th>
+                    <th>Ciclo</th>
+                    <th>Status</th>
+                    <th>Creado</th>
+                    <th>Tenant</th>
+                    <th>Provisionado</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var signup in signups)
+                {
+                    <tr>
+                        <td>@signup.OrganizationName</td>
+                        <td>@signup.Email</td>
+                        <td>@signup.PlanKey</td>
+                        <td>@signup.BillingCycle</td>
+                        <td>@signup.Status</td>
+                        <td>@signup.CreatedAt.ToLocalTime().ToString("g")</td>
+                        <td>@(signup.ProvisionedTenantId?.ToString() ?? "—")</td>
+                        <td>@(signup.ProvisionedAt?.ToLocalTime().ToString("g") ?? "—")</td>
+                        <td>
+                            @if (signup.ProvisionedTenantId is null)
+                            {
+                                <button class="btn btn-sm btn-primary" @onclick="() => RetryAsync(signup.StripeSessionId)" disabled="@isRetrying">
+                                    Reintentar aprovisionamiento
+                                </button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+        @if (!string.IsNullOrWhiteSpace(retryMessage))
+        {
+            <div class="alert alert-info">@retryMessage</div>
+        }
+    }
+}
+
+@code {
+    private IReadOnlyList<PendingSignupRecord> signups = [];
+    private bool isLoading;
+    private bool isRetrying;
+    private bool isAuthorized;
+    private string? retryMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        isAuthorized = IsFounderAdmin(authState.User);
+
+        if (isAuthorized)
+        {
+            await LoadAsync();
+        }
+    }
+
+    private static bool IsFounderAdmin(ClaimsPrincipal user)
+    {
+        var isFounderTenant = user.FindFirst("TenantId")?.Value == "1";
+        var isAdministrador = user.IsInRole("Administrador");
+        return isFounderTenant && isAdministrador;
+    }
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+        signups = await Signups.ListRecentAsync(100);
+        isLoading = false;
+    }
+
+    private async Task RetryAsync(string stripeSessionId)
+    {
+        isRetrying = true;
+        retryMessage = null;
+
+        var tenantId = await Signups.CompleteSignupAndProvisionTenantAsync(stripeSessionId, null);
+        retryMessage = tenantId is null
+            ? "No se pudo aprovisionar (revisa que el pago haya sido registrado)."
+            : $"Aprovisionado con éxito. Tenant Id: {tenantId}.";
+
+        isRetrying = false;
+        await LoadAsync();
+    }
+}
