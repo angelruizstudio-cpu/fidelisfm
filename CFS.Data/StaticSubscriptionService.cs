@@ -23,7 +23,9 @@ public sealed class StaticSubscriptionService : ISubscriptionService
         [CfsFeatures.MultiChurch] = "Multi-iglesia",
         [CfsFeatures.Audit] = "Auditoría",
         [CfsFeatures.CheckApprovals] = "Aprobación de cheques",
-        [CfsFeatures.Documents] = "Documentos adjuntos"
+        [CfsFeatures.Documents] = "Documentos adjuntos",
+        [CfsFeatures.ExcelExport] = "Integración Excel automatizado",
+        [CfsFeatures.DonationStatements] = "Declaración de donativos"
     };
 
     private static readonly IReadOnlyDictionary<string, HashSet<string>> PlanFeatures = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase)

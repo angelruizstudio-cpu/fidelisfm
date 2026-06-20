@@ -63,6 +63,13 @@
                 Reportes
             </NavLink>
         }
+        @if (subscription is not null && !subscription.IsFounderAccount)
+        {
+            <NavLink class="nav-link" href="configuracion/plan">
+                <span class="nav-icon" aria-hidden="true">★</span>
+                Plan y Add-ons
+            </NavLink>
+        }
         @if (isFounderAdmin)
         {
             <NavLink class="nav-link" href="admin/signups">

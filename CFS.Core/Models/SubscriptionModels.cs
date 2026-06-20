@@ -18,6 +18,22 @@ public static class CfsFeatures
     public const string Audit = "audit";
     public const string CheckApprovals = "checks.approvals";
     public const string Documents = "documents";
+    public const string ExcelExport = "integrations.excel_export";
+    public const string DonationStatements = "reports.donation_statements";
+}
+
+public static class CfsAddons
+{
+    public const string AiBundle = "addon.ai_bundle";
+    public const string ExcelExport = "addon.excel_export";
+    public const string DonationStatements = "addon.donation_statements";
+
+    public static readonly IReadOnlyDictionary<string, string[]> FeatureKeysByAddon = new Dictionary<string, string[]>
+    {
+        [AiBundle] = [CfsFeatures.AiInsights, CfsFeatures.AiAdvisor],
+        [ExcelExport] = [CfsFeatures.ExcelExport],
+        [DonationStatements] = [CfsFeatures.DonationStatements],
+    };
 }
 
 public static class CfsPlans

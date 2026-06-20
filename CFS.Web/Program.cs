@@ -33,15 +33,16 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
     });
 builder.Services.AddAuthorization();
 builder.Services.AddScoped<ITenantContext, HttpTenantContext>();
-builder.Services.AddScoped<ISubscriptionService, StaticSubscriptionService>();
 builder.Services.AddHttpClient<IAiAdvisorService, OpenAiAdvisorService>();
 builder.Services.AddScoped<IStripeCheckoutService, StripeCheckoutService>();
 
 var demoEnabled = builder.Configuration.GetValue("Demo:Enabled", false);
 if (demoEnabled)
 {
+    builder.Services.AddScoped<ISubscriptionService, StaticSubscriptionService>();
     builder.Services.AddScoped<IAiUsageLimiter, DemoAiUsageLimiter>();
     builder.Services.AddScoped<IOrganizationLabelService, DemoOrganizationLabelService>();
+    builder.Services.AddScoped<IBillingRepository, DemoBillingRepository>();
     builder.Services.AddScoped<ISignupRepository, DemoSignupRepository>();
     builder.Services.AddScoped<IDashboardRepository, DemoDashboardRepository>();
     builder.Services.AddScoped<IUserAuthenticationRepository, DemoUserAuthenticationRepository>();
@@ -57,8 +58,10 @@ else
 {
     builder.Services.AddScoped(_ =>
         new SqlConnectionFactory(builder.Configuration.GetConnectionString("CfsDatabase") ?? string.Empty));
+    builder.Services.AddScoped<ISubscriptionService, SqlSubscriptionService>();
     builder.Services.AddScoped<IAiUsageLimiter, SqlAiUsageLimiter>();
     builder.Services.AddScoped<IOrganizationLabelService, SqlOrganizationLabelService>();
+    builder.Services.AddScoped<IBillingRepository, SqlBillingRepository>();
     builder.Services.AddScoped<ISignupRepository, SqlSignupRepository>();
     builder.Services.AddScoped<IDashboardRepository, SqlDashboardRepository>();
     builder.Services.AddScoped<IUserAuthenticationRepository, SqlUserAuthenticationRepository>();
@@ -94,7 +97,7 @@ app.MapGet("/logout", async (HttpContext httpContext) =>
     return Results.Redirect("/login");
 }).RequireAuthorization();
 
-app.MapPost("/api/stripe/webhook", async (HttpRequest request, IConfiguration config, ISignupRepository signups, ILoggerFactory loggerFactory) =>
+app.MapPost("/api/stripe/webhook", async (HttpRequest request, IConfiguration config, ISignupRepository signups, IBillingRepository billing, ILoggerFactory loggerFactory) =>
 {
     var logger = loggerFactory.CreateLogger("StripeWebhook");
     var json = await new StreamReader(request.Body).ReadToEndAsync();
@@ -122,10 +125,46 @@ app.MapPost("/api/stripe/webhook", async (HttpRequest request, IConfiguration co
     if (stripeEvent.Type == "checkout.session.completed" &&
         stripeEvent.Data.Object is Stripe.Checkout.Session session)
     {
-        var tenantId = await signups.CompleteSignupAndProvisionTenantAsync(session.Id, session.CustomerId, request.HttpContext.RequestAborted);
-        if (tenantId is null)
+        var ct = request.HttpContext.RequestAborted;
+        var checkoutType = session.Metadata is not null && session.Metadata.TryGetValue("Type", out var t) ? t : null;
+
+        if (checkoutType == "Addon")
         {
-            logger.LogWarning("Stripe checkout.session.completed for session {SessionId} had no matching pending signup to provision.", session.Id);
+            var tenantId = int.Parse(session.Metadata["TenantId"]);
+            var addonKey = session.Metadata["AddonKey"];
+            var featureKeys = CfsAddons.FeatureKeysByAddon[addonKey];
+            await billing.GrantAddonFeaturesAsync(tenantId, featureKeys, session.CustomerId, ct);
+        }
+        else if (checkoutType == "Upgrade")
+        {
+            var tenantId = int.Parse(session.Metadata["TenantId"]);
+            var newPlanKey = session.Metadata["NewPlanKey"];
+            var previousSubscriptionId = await billing.CompleteUpgradeAsync(tenantId, newPlanKey, session.SubscriptionId, session.CustomerId, ct);
+
+            if (!string.IsNullOrWhiteSpace(previousSubscriptionId))
+            {
+                var secretKey = config["STRIPE_SECRET_KEY"];
+                if (!string.IsNullOrWhiteSpace(secretKey))
+                {
+                    try
+                    {
+                        var subscriptionService = new Stripe.SubscriptionService(new Stripe.StripeClient(secretKey));
+                        await subscriptionService.CancelAsync(previousSubscriptionId, cancellationToken: ct);
+                    }
+                    catch (Stripe.StripeException ex)
+                    {
+                        logger.LogWarning(ex, "Failed to cancel previous Stripe subscription {SubscriptionId} after upgrade.", previousSubscriptionId);
+                    }
+                }
+            }
+        }
+        else
+        {
+            var tenantId = await signups.CompleteSignupAndProvisionTenantAsync(session.Id, session.CustomerId, session.SubscriptionId, ct);
+            if (tenantId is null)
+            {
+                logger.LogWarning("Stripe checkout.session.completed for session {SessionId} had no matching pending signup to provision.", session.Id);
+            }
         }
     }
 

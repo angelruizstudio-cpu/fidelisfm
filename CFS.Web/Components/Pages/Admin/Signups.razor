@@ -120,7 +120,7 @@ else
         isRetrying = true;
         retryMessage = null;
 
-        var tenantId = await SignupRepository.CompleteSignupAndProvisionTenantAsync(stripeSessionId, null);
+        var tenantId = await SignupRepository.CompleteSignupAndProvisionTenantAsync(stripeSessionId, null, null);
         retryMessage = tenantId is null
             ? "No se pudo aprovisionar (revisa que el pago haya sido registrado)."
             : $"Aprovisionado con éxito. Tenant Id: {tenantId}.";

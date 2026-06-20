@@ -1,0 +1,159 @@
+@page "/configuracion/plan"
+@rendermode InteractiveServer
+@using System.Security.Claims
+@using CFS.Core.Models
+@inject ISubscriptionService SubscriptionService
+@inject IStripeCheckoutService StripeCheckout
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+
+<PageTitle>Fidelis Configuración · Plan y Add-ons</PageTitle>
+
+<div class="screen-header">
+    <div>
+        <p class="eyebrow">Configuración</p>
+        <h1>Plan y Add-ons</h1>
+    </div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(errorMessage))
+{
+    <div class="alert alert-danger" role="alert">@errorMessage</div>
+}
+
+@if (isLoading)
+{
+    <div class="status-panel">Cargando...</div>
+}
+else
+{
+    <section class="settings-group">
+        <h2>Tu plan actual</h2>
+        <p>Plan: <strong>@subscription?.PlanName</strong></p>
+    </section>
+
+    @if (!subscription!.IsFounderAccount && upgradeOptions.Count > 0)
+    {
+        <section class="settings-group">
+            <h2>Mejora tu plan</h2>
+            <p>Obtén 25% de descuento en el primer mes al mejorar tu plan.</p>
+            <div class="quick-actions">
+                @foreach (var plan in upgradeOptions)
+                {
+                    <button class="btn btn-outline-secondary" @onclick="() => UpgradeAsync(plan.Key)" disabled="@isRedirecting">
+                        Mejorar a @plan.Name
+                    </button>
+                }
+            </div>
+        </section>
+    }
+
+    <section class="settings-group">
+        <h2>Add-ons disponibles</h2>
+        <div class="quick-actions">
+            <button class="btn btn-outline-secondary" @onclick='() => BuyAddonAsync(CfsAddons.AiBundle)' disabled="@(isRedirecting || HasAddon(CfsAddons.AiBundle))">
+                @(HasAddon(CfsAddons.AiBundle) ? "Bundle IA completo (activo)" : "Bundle IA completo - $35/mes")
+            </button>
+            <button class="btn btn-outline-secondary" @onclick='() => BuyAddonAsync(CfsAddons.ExcelExport)' disabled="@(isRedirecting || HasAddon(CfsAddons.ExcelExport))">
+                @(HasAddon(CfsAddons.ExcelExport) ? "Integración Excel (activo)" : "Integración Excel Automatizado - $15/mes")
+            </button>
+            <button class="btn btn-outline-secondary" @onclick='() => BuyAddonAsync(CfsAddons.DonationStatements)' disabled="@(isRedirecting || HasAddon(CfsAddons.DonationStatements))">
+                @(HasAddon(CfsAddons.DonationStatements) ? "Declaración de Donativos (activo)" : "Declaración de Donativos - $15/mes")
+            </button>
+        </div>
+    </section>
+}
+
+@code {
+    private static readonly (string Key, string Name)[] AllPlans =
+    [
+        (CfsPlans.Basic, "Basic"),
+        (CfsPlans.Standard, "Standard"),
+        (CfsPlans.Pro, "Pro"),
+    ];
+
+    private TenantSubscription? subscription;
+    private ClaimsPrincipal? user;
+    private List<(string Key, string Name)> upgradeOptions = [];
+    private bool isLoading = true;
+    private bool isRedirecting;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        user = authState.User;
+        subscription = await SubscriptionService.GetCurrentAsync(user);
+
+        var currentIndex = Array.FindIndex(AllPlans, p => p.Key.Equals(subscription.PlanKey, StringComparison.OrdinalIgnoreCase));
+        upgradeOptions = currentIndex >= 0
+            ? AllPlans.Skip(currentIndex + 1).ToList()
+            : [];
+
+        isLoading = false;
+    }
+
+    private bool HasAddon(string addonKey) =>
+        CfsAddons.FeatureKeysByAddon.TryGetValue(addonKey, out var keys) &&
+        keys.All(k => subscription?.HasFeature(k) ?? false);
+
+    private async Task BuyAddonAsync(string addonKey)
+    {
+        if (isRedirecting)
+        {
+            return;
+        }
+
+        isRedirecting = true;
+        errorMessage = null;
+
+        try
+        {
+            var baseUrl = NavigationManager.BaseUri.TrimEnd('/');
+            var request = new AddonCheckoutRequest(
+                subscription!.TenantId,
+                user!.FindFirst(ClaimTypes.Name)?.Value ?? "",
+                addonKey,
+                $"{baseUrl}/checkout/success",
+                $"{baseUrl}/configuracion/plan");
+
+            var session = await StripeCheckout.CreateAddonCheckoutSessionAsync(request);
+            NavigationManager.NavigateTo(session.Url, forceLoad: true);
+        }
+        catch (Exception)
+        {
+            errorMessage = "No pudimos iniciar el pago. Intenta de nuevo en un momento.";
+            isRedirecting = false;
+        }
+    }
+
+    private async Task UpgradeAsync(string newPlanKey)
+    {
+        if (isRedirecting)
+        {
+            return;
+        }
+
+        isRedirecting = true;
+        errorMessage = null;
+
+        try
+        {
+            var baseUrl = NavigationManager.BaseUri.TrimEnd('/');
+            var request = new UpgradeCheckoutRequest(
+                subscription!.TenantId,
+                user!.FindFirst(ClaimTypes.Name)?.Value ?? "",
+                newPlanKey,
+                $"{baseUrl}/checkout/success",
+                $"{baseUrl}/configuracion/plan");
+
+            var session = await StripeCheckout.CreateUpgradeCheckoutSessionAsync(request);
+            NavigationManager.NavigateTo(session.Url, forceLoad: true);
+        }
+        catch (Exception)
+        {
+            errorMessage = "No pudimos iniciar el pago. Intenta de nuevo en un momento.";
+            isRedirecting = false;
+        }
+    }
+}
