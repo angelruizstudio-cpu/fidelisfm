@@ -2,6 +2,11 @@
 @layout LoginLayout
 @attribute [AllowAnonymous]
 @using Microsoft.AspNetCore.Authorization
+@using CFS.Core.Models
+@using CFS.Core.Services
+@inject NavigationManager Navigation
+@inject IStripeCheckoutService StripeCheckout
+@inject ISignupRepository Signups
 
 <PageTitle>Fidelis Financial Management</PageTitle>
 
@@ -87,6 +92,15 @@
             <h2>Planes pensados para el nivel de operación de cada iglesia.</h2>
         </div>
 
+        <div class="billing-toggle" role="group" aria-label="Ciclo de facturación">
+            <button type="button" class="@(billingCycle == BillingCycle.Monthly ? "active" : "")" @onclick="() => SetBillingCycle(BillingCycle.Monthly)">
+                Mensual
+            </button>
+            <button type="button" class="@(billingCycle == BillingCycle.Annual ? "active" : "")" @onclick="() => SetBillingCycle(BillingCycle.Annual)">
+                Anual <span class="discount-pill">-10%</span>
+            </button>
+        </div>
+
         <div class="pricing-grid">
             @foreach (var plan in Plans)
             {
@@ -97,19 +111,32 @@
                     }
                     <h3>@plan.Name</h3>
                     <p>@plan.Description</p>
-                    <div class="plan-price">
-                        <strong>@plan.Price</strong>
-                        <span>@plan.Term</span>
-                    </div>
+                    @if (plan.IsCustomPricing)
+                    {
+                        <div class="plan-price">
+                            <strong>Custom</strong>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="plan-price">
+                            <strong>@FormatPrice(plan, billingCycle)</strong>
+                            <span>@(billingCycle == BillingCycle.Monthly ? "/mes" : "/año")</span>
+                        </div>
+                        @if (billingCycle == BillingCycle.Annual)
+                        {
+                            <p class="plan-savings">Ahorras @FormatSavings(plan)/año pagando anual</p>
+                        }
+                    }
                     <ul>
                         @foreach (var feature in plan.Features)
                         {
                             <li>@feature</li>
                         }
                     </ul>
-                    <a class="btn @(plan.Highlight ? "btn-primary" : "btn-outline-secondary")" href="login?returnUrl=%2Fdashboard">
-                        Solicitar acceso
-                    </a>
+                    <button type="button" class="btn @(plan.Highlight ? "btn-primary" : "btn-outline-secondary")" @onclick="() => OpenCheckout(plan)">
+                        Escoger plan
+                    </button>
                 </article>
             }
         </div>
@@ -119,15 +146,205 @@
             <span>Tu congregación mantiene acceso completo sin costo como cuenta fundadora de Fidelis.</span>
         </div>
     </section>
+
+    @if (selectedPlan is not null)
+    {
+        <div class="checkout-overlay" role="dialog" aria-modal="true" aria-label="Escoger plan">
+            <div class="checkout-modal">
+                <button type="button" class="checkout-close" aria-label="Cerrar" @onclick="CloseCheckout">×</button>
+
+                <ol class="checkout-steps">
+                    <li class="@(checkoutStep >= 1 ? "done" : "")"><span class="step-index">1</span> Escoger plan</li>
+                    <li class="@(checkoutStep >= 2 ? "done" : "")"><span class="step-index">2</span> Crear cuenta</li>
+                    <li class="@(checkoutStep >= 3 ? "done" : "")"><span class="step-index">3</span> Pago</li>
+                </ol>
+
+                <div class="checkout-body">
+                    <div class="checkout-main">
+                        @if (checkoutStep == 1)
+                        {
+                            <h3>Confirma tu plan</h3>
+                            <p>Puedes cambiar de plan antes de continuar.</p>
+                            <div class="checkout-plan-options">
+                                @foreach (var plan in Plans.Where(p => !p.IsCustomPricing))
+                                {
+                                    <label class="checkout-plan-option @(selectedPlan == plan ? "selected" : "")">
+                                        <input type="radio" name="checkout-plan" checked="@(selectedPlan == plan)" @onchange="() => selectedPlan = plan" />
+                                        <span>@plan.Name — @FormatPrice(plan, billingCycle)@(billingCycle == BillingCycle.Monthly ? "/mes" : "/año")</span>
+                                    </label>
+                                }
+                            </div>
+                            <button type="button" class="btn btn-primary" @onclick="() => checkoutStep = 2">Continuar</button>
+                        }
+                        else if (checkoutStep == 2)
+                        {
+                            <h3>Crea tu cuenta</h3>
+                            <EditForm Model="account" OnValidSubmit="() => checkoutStep = 3">
+                                <DataAnnotationsValidator />
+                                <div class="checkout-field">
+                                    <label>Nombre de la iglesia / organización</label>
+                                    <InputText @bind-Value="account.OrganizationName" />
+                                </div>
+                                <div class="checkout-field">
+                                    <label>Correo electrónico</label>
+                                    <InputText @bind-Value="account.Email" type="email" />
+                                </div>
+                                <div class="checkout-field">
+                                    <label>Contraseña</label>
+                                    <InputText @bind-Value="account.Password" type="password" />
+                                </div>
+                                <div class="checkout-field">
+                                    <label>Teléfono</label>
+                                    <InputText @bind-Value="account.Phone" />
+                                </div>
+                                <button type="button" class="btn btn-outline-secondary" @onclick="() => checkoutStep = 1">Atrás</button>
+                                <button type="submit" class="btn btn-primary">Continuar a pago</button>
+                            </EditForm>
+                        }
+                        else
+                        {
+                            <h3>Pago</h3>
+                            <p class="checkout-pending">
+                                Serás redirigido a Stripe para completar tu pago de forma segura.
+                            </p>
+                            @if (checkoutError is not null)
+                            {
+                                <p class="checkout-error">@checkoutError</p>
+                            }
+                            <button type="button" class="btn btn-outline-secondary" @onclick="() => checkoutStep = 2" disabled="@isRedirectingToStripe">Atrás</button>
+                            <button type="button" class="btn btn-primary" @onclick="StartStripeCheckoutAsync" disabled="@isRedirectingToStripe">
+                                @(isRedirectingToStripe ? "Redirigiendo..." : "Pagar con Stripe")
+                            </button>
+                        }
+                    </div>
+
+                    <aside class="checkout-summary">
+                        <h4>Tu plan</h4>
+                        @if (billingCycle == BillingCycle.Annual)
+                        {
+                            <p class="checkout-savings">Ahorras @FormatSavings(selectedPlan)/año 🎉</p>
+                        }
+                        <div class="checkout-summary-row">
+                            <span>@selectedPlan.Name</span>
+                            <strong>@FormatPrice(selectedPlan, billingCycle)@(billingCycle == BillingCycle.Monthly ? "/mes" : "/año")</strong>
+                        </div>
+                        <hr />
+                        <div class="checkout-summary-row checkout-total">
+                            <span>Total</span>
+                            <strong>@FormatPrice(selectedPlan, billingCycle)@(billingCycle == BillingCycle.Monthly ? "/mes" : "/año")</strong>
+                        </div>
+                        <p class="checkout-fineprint">Impuestos no incluidos. Cancela cuando quieras.</p>
+                    </aside>
+                </div>
+            </div>
+        </div>
+    }
 </main>
 
 @code {
+    private enum BillingCycle { Monthly, Annual }
+
+    private BillingCycle billingCycle = BillingCycle.Monthly;
+    private PricingPlan? selectedPlan;
+    private int checkoutStep = 1;
+    private readonly CheckoutAccount account = new();
+    private bool isRedirectingToStripe;
+    private string? checkoutError;
+
+    private const decimal AnnualDiscount = 0.10m;
+
+    private void SetBillingCycle(BillingCycle cycle) => billingCycle = cycle;
+
+    private void OpenCheckout(PricingPlan plan)
+    {
+        selectedPlan = plan;
+        checkoutStep = 1;
+    }
+
+    private void CloseCheckout()
+    {
+        selectedPlan = null;
+        checkoutStep = 1;
+        checkoutError = null;
+    }
+
+    private async Task StartStripeCheckoutAsync()
+    {
+        if (selectedPlan is null || isRedirectingToStripe)
+        {
+            return;
+        }
+
+        isRedirectingToStripe = true;
+        checkoutError = null;
+
+        try
+        {
+            var baseUri = Navigation.BaseUri.TrimEnd('/');
+            var planKey = PlanKeyFor(selectedPlan);
+            var request = new CheckoutSessionRequest(
+                planKey,
+                billingCycle.ToString(),
+                account.OrganizationName,
+                account.Email,
+                account.Phone,
+                $"{baseUri}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}",
+                $"{baseUri}/?checkout=cancelled");
+
+            var session = await StripeCheckout.CreateCheckoutSessionAsync(request);
+
+            await Signups.CreatePendingSignupAsync(
+                new PendingSignup(account.OrganizationName, account.Email, account.Phone, planKey, billingCycle.ToString(), session.SessionId, null),
+                account.Password);
+
+            Navigation.NavigateTo(session.Url, forceLoad: true);
+        }
+        catch (Exception)
+        {
+            checkoutError = "No pudimos iniciar el pago. Intenta de nuevo en un momento.";
+            isRedirectingToStripe = false;
+        }
+    }
+
+    private static string PlanKeyFor(PricingPlan plan) => plan.Name switch
+    {
+        "Básico" => CfsPlans.Basic,
+        "Standard" => CfsPlans.Standard,
+        "Pro" => CfsPlans.Pro,
+        _ => CfsPlans.Basic,
+    };
+
+    private static string FormatPrice(PricingPlan? plan, BillingCycle cycle)
+    {
+        if (plan is null || plan.IsCustomPricing)
+        {
+            return "Custom";
+        }
+
+        var amount = cycle == BillingCycle.Monthly
+            ? plan.MonthlyPrice
+            : Math.Round(plan.MonthlyPrice * 12 * (1 - AnnualDiscount), 0);
+
+        return $"${amount:0}";
+    }
+
+    private static string FormatSavings(PricingPlan? plan)
+    {
+        if (plan is null || plan.IsCustomPricing)
+        {
+            return "$0";
+        }
+
+        var fullYear = plan.MonthlyPrice * 12;
+        var discountedYear = Math.Round(fullYear * (1 - AnnualDiscount), 0);
+        return $"${fullYear - discountedYear:0}";
+    }
+
     private static readonly IReadOnlyList<PricingPlan> Plans =
     [
         new(
             "Básico",
-            "$29",
-            "/mes",
+            29,
             "Registro financiero simple para iglesias que quieren empezar con orden.",
             [
                 "Dashboard financiero",
@@ -136,11 +353,11 @@
                 "Reportes básicos",
                 "Usuarios limitados"
             ],
+            false,
             false),
         new(
             "Standard",
-            "$59",
-            "/mes",
+            59,
             "Operación contable completa para la tesorería diaria de una iglesia.",
             [
                 "Todo en Básico",
@@ -151,11 +368,11 @@
                 "P&L, P&L Detail y Balance Sheet",
                 "Más usuarios"
             ],
-            true),
+            true,
+            false),
         new(
             "Pro",
-            "$99",
-            "/mes",
+            99,
             "IA, auditoría y automatización para iglesias que quieren análisis avanzado.",
             [
                 "Todo en Standard",
@@ -165,28 +382,37 @@
                 "Automatizaciones",
                 "Análisis de tendencias"
             ],
+            false,
             false),
         new(
             "Multi-Iglesia",
-            "Custom",
-            "",
+            0,
             "Administración por organización para concilios, redes o varias sedes.",
             [
-                "Todo en Pro",
+                "Todo en Básico y Standard para la iglesia principal",
                 "Varias iglesias bajo una organización",
                 "Dashboard consolidado",
                 "Usuarios por iglesia",
                 "Reportes por iglesia y consolidados",
                 "Administración central"
             ],
-            false)
+            false,
+            true)
     ];
 
     private sealed record PricingPlan(
         string Name,
-        string Price,
-        string Term,
+        decimal MonthlyPrice,
         string Description,
         IReadOnlyList<string> Features,
-        bool Highlight);
+        bool Highlight,
+        bool IsCustomPricing);
+
+    private sealed class CheckoutAccount
+    {
+        public string OrganizationName { get; set; } = "";
+        public string Email { get; set; } = "";
+        public string Password { get; set; } = "";
+        public string Phone { get; set; } = "";
+    }
 }

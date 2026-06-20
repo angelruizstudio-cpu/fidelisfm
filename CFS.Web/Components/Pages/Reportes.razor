@@ -3,6 +3,7 @@
 @inject IReportRepository ReportRepository
 @inject ISubscriptionService SubscriptionService
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IOrganizationLabelService OrganizationLabelService
 
 <PageTitle>Fidelis Reportes</PageTitle>
 
@@ -114,7 +115,7 @@
                 </div>
 
                 <div class="report-title">
-                    <h2>Iglesia Cristiana Pentecostes Inc</h2>
+                    <h2>@tenantName</h2>
                     <span>@report.Title</span>
                     @if (!string.IsNullOrWhiteSpace(SelectedAccountName))
                     {
@@ -344,6 +345,8 @@
     private bool showPrintDialog;
     private bool hasAiInsights = true;
     private bool hasAiAdvisor;
+    private string tenantName = "Iglesia Cristiana Pentecostes Inc";
+    private OrganizationLabels labels = OrganizationLabelDefaults.GetDefaults(OrganizationType.Church);
 
     private MarkupString PrintIcon => new("""
         <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -407,6 +410,8 @@
             var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
             hasAiInsights = await SubscriptionService.HasFeatureAsync(authState.User, CfsFeatures.AiInsights);
             hasAiAdvisor = await SubscriptionService.HasFeatureAsync(authState.User, CfsFeatures.AiAdvisor);
+            tenantName = authState.User.FindFirst("TenantName")?.Value ?? tenantName;
+            labels = await OrganizationLabelService.GetLabelsAsync();
             catalog = await ReportRepository.GetCatalogAsync();
             bankAccounts = await ReportRepository.GetBankAccountsAsync();
             selectedAccountId = bankAccounts.FirstOrDefault(account =>

@@ -25,6 +25,7 @@ public sealed class SqlUserAuthenticationRepository(SqlConnectionFactory connect
 
         var hasCurrentColumns = await HasColumnsAsync(connection, "ContrasenaSalt", "ContrasenaHash", cancellationToken);
         var hasLegacyColumns = await HasColumnsAsync(connection, "Salt", "Hash", cancellationToken);
+        var hasTenantColumn = await HasColumnAsync(connection, "ID_Tenant_FK", cancellationToken);
 
         if (!hasCurrentColumns && !hasLegacyColumns)
         {
@@ -35,7 +36,8 @@ public sealed class SqlUserAuthenticationRepository(SqlConnectionFactory connect
             {(hasCurrentColumns ? "ContrasenaSalt" : "CAST(NULL AS VARBINARY(MAX)) AS ContrasenaSalt")},
             {(hasCurrentColumns ? "ContrasenaHash" : "CAST(NULL AS VARBINARY(MAX)) AS ContrasenaHash")},
             {(hasLegacyColumns ? "Salt" : "CAST(NULL AS VARBINARY(MAX)) AS Salt")},
-            {(hasLegacyColumns ? "Hash" : "CAST(NULL AS VARBINARY(MAX)) AS Hash")}
+            {(hasLegacyColumns ? "Hash" : "CAST(NULL AS VARBINARY(MAX)) AS Hash")},
+            {(hasTenantColumn ? "ID_Tenant_FK" : "CAST(1 AS INT) AS ID_Tenant_FK")}
             """;
 
         await using var command = connection.CreateCommand();
@@ -55,6 +57,7 @@ public sealed class SqlUserAuthenticationRepository(SqlConnectionFactory connect
         string fullName;
         byte[]? salt;
         byte[]? expectedHash;
+        int tenantId;
 
         await using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleRow, cancellationToken))
         {
@@ -77,6 +80,7 @@ public sealed class SqlUserAuthenticationRepository(SqlConnectionFactory connect
 
             salt = HasValue(currentSalt) && HasValue(currentHash) ? currentSalt : legacySalt;
             expectedHash = HasValue(currentSalt) && HasValue(currentHash) ? currentHash : legacyHash;
+            tenantId = reader.GetInt32(reader.GetOrdinal("ID_Tenant_FK"));
         }
 
         if (!VerifyPassword(password, salt, expectedHash))
@@ -85,7 +89,8 @@ public sealed class SqlUserAuthenticationRepository(SqlConnectionFactory connect
         }
 
         var roles = await LoadRolesAsync(connection, userId, cancellationToken);
-        return new AuthenticatedUser(userId, storedUserName, fullName, roles);
+        var (tenantName, planKey) = await LoadTenantInfoAsync(connection, tenantId, cancellationToken);
+        return new AuthenticatedUser(userId, storedUserName, fullName, roles, tenantId, tenantName, planKey);
     }
 
     private static async Task<bool> HasColumnsAsync(
@@ -106,6 +111,42 @@ public sealed class SqlUserAuthenticationRepository(SqlConnectionFactory connect
 
         var result = await command.ExecuteScalarAsync(cancellationToken);
         return Convert.ToInt32(result) == 1;
+    }
+
+    private static async Task<bool> HasColumnAsync(SqlConnection connection, string columnName, CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT CASE WHEN COL_LENGTH('dbo.Usuarios', @columnName) IS NOT NULL THEN 1 ELSE 0 END;";
+        command.Parameters.Add("@columnName", SqlDbType.NVarChar, 128).Value = columnName;
+
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return Convert.ToInt32(result) == 1;
+    }
+
+    private static async Task<(string TenantName, string PlanKey)> LoadTenantInfoAsync(
+        SqlConnection connection,
+        int tenantId,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT T.NombreTenant,
+                   (SELECT TOP 1 TS.PlanKey FROM dbo.TenantSubscriptions TS
+                    WHERE TS.ID_Tenant_FK = T.ID_Tenant ORDER BY TS.StartedAt DESC) AS PlanKey
+            FROM dbo.Tenants T
+            WHERE T.ID_Tenant = @tenantId;
+            """;
+        command.Parameters.Add("@tenantId", SqlDbType.Int).Value = tenantId;
+
+        await using var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleRow, cancellationToken);
+        if (await reader.ReadAsync(cancellationToken))
+        {
+            var tenantName = reader.GetString(reader.GetOrdinal("NombreTenant"));
+            var planKey = reader["PlanKey"] is DBNull ? CfsPlans.Basic : reader.GetString(reader.GetOrdinal("PlanKey"));
+            return (tenantName, planKey);
+        }
+
+        return ("Iglesia Cristiana Pentecostes Inc", CfsPlans.Founder);
     }
 
     private static async Task<IReadOnlyList<string>> LoadRolesAsync(

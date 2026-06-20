@@ -1,6 +1,8 @@
 @page "/reportes/imprimir"
 @layout PrintLayout
 @inject IReportRepository ReportRepository
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IOrganizationLabelService OrganizationLabelService
 
 <PageTitle>Fidelis Reporte PDF</PageTitle>
 
@@ -22,7 +24,7 @@ else if (report is not null)
 
     <article class="formal-report-sheet">
         <header class="formal-report-header">
-            <h1>Iglesia Cristiana Pentecostes Inc</h1>
+            <h1>@tenantName</h1>
             <span>@report.Title</span>
             @if (!string.IsNullOrWhiteSpace(SelectedAccountName))
             {
@@ -78,11 +80,11 @@ else if (report is not null)
         <section class="formal-signatures">
             <div>
                 <span></span>
-                <strong>Firma del Pastor</strong>
+                <strong>@PrimaryOfficerSignatureLabel</strong>
             </div>
             <div>
                 <span></span>
-                <strong>Firma de Tesorería</strong>
+                <strong>@SecondaryOfficerSignatureLabel</strong>
             </div>
         </section>
 
@@ -111,6 +113,16 @@ else if (report is not null)
     private FinancialReport? report;
     private string? errorMessage;
     private bool isLoading = true;
+    private string tenantName = "Iglesia Cristiana Pentecostes Inc";
+    private OrganizationLabels labels = OrganizationLabelDefaults.GetDefaults(OrganizationType.Church);
+
+    private string PrimaryOfficerSignatureLabel => labels.PrimaryOfficerLabel.Equals("Pastor", StringComparison.Ordinal)
+        ? "Firma del Pastor"
+        : $"Firma de {labels.PrimaryOfficerLabel}";
+
+    private string SecondaryOfficerSignatureLabel => labels.SecondaryOfficerLabel.Equals("Tesorería", StringComparison.Ordinal)
+        ? "Firma de Tesorería"
+        : $"Firma de {labels.SecondaryOfficerLabel}";
 
     private DateTime StartDate => Start?.Date ?? new DateTime(DateTime.Today.Year, 1, 1);
     private DateTime EndDate => End?.Date ?? DateTime.Today;
@@ -128,6 +140,9 @@ else if (report is not null)
     {
         try
         {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            tenantName = authState.User.FindFirst("TenantName")?.Value ?? tenantName;
+            labels = await OrganizationLabelService.GetLabelsAsync();
             bankAccounts = await ReportRepository.GetBankAccountsAsync();
             report = await ReportRepository.GetReportAsync(new ReportRequest(ReportType, StartDate, EndDate, AccountId));
         }
