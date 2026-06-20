@@ -40,7 +40,11 @@ public sealed class SqlSignupRepository(SqlConnectionFactory connectionFactory) 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    public async Task<int?> CompleteSignupAndProvisionTenantAsync(string stripeSessionId, string? stripeCustomerId, CancellationToken cancellationToken = default)
+    public async Task<int?> CompleteSignupAndProvisionTenantAsync(
+        string stripeSessionId,
+        string? stripeCustomerId,
+        string? stripeSubscriptionId,
+        CancellationToken cancellationToken = default)
     {
         await using var connection = connectionFactory.Create();
         await connection.OpenAsync(cancellationToken);
@@ -105,13 +109,17 @@ public sealed class SqlSignupRepository(SqlConnectionFactory connectionFactory) 
             }
 
             const string insertSubscriptionSql = """
-                INSERT INTO dbo.TenantSubscriptions (ID_Tenant_FK, PlanKey, BillingRequired, IsFounderAccount, Status)
-                VALUES (@tenantId, @planKey, 1, 0, 'Active');
+                INSERT INTO dbo.TenantSubscriptions
+                    (ID_Tenant_FK, PlanKey, BillingRequired, IsFounderAccount, Status, StripeCustomerId, StripeSubscriptionId)
+                VALUES
+                    (@tenantId, @planKey, 1, 0, 'Active', @stripeCustomerId, @stripeSubscriptionId);
                 """;
             await using (var command = new SqlCommand(insertSubscriptionSql, connection, transaction))
             {
                 command.Parameters.Add("@tenantId", SqlDbType.Int).Value = tenantId;
                 command.Parameters.Add("@planKey", SqlDbType.NVarChar, 50).Value = planKey;
+                command.Parameters.Add("@stripeCustomerId", SqlDbType.NVarChar, 100).Value = (object?)stripeCustomerId ?? DBNull.Value;
+                command.Parameters.Add("@stripeSubscriptionId", SqlDbType.NVarChar, 100).Value = (object?)stripeSubscriptionId ?? DBNull.Value;
                 await command.ExecuteNonQueryAsync(cancellationToken);
             }
 

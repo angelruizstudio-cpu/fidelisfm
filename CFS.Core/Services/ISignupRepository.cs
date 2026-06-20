@@ -35,7 +35,11 @@ public interface ISignupRepository
     /// marks it Provisioned. Idempotent — replaying the same event returns the same TenantId
     /// without creating duplicates. Returns null if no matching pending signup is found.
     /// </summary>
-    Task<int?> CompleteSignupAndProvisionTenantAsync(string stripeSessionId, string? stripeCustomerId, CancellationToken cancellationToken = default);
+    Task<int?> CompleteSignupAndProvisionTenantAsync(
+        string stripeSessionId,
+        string? stripeCustomerId,
+        string? stripeSubscriptionId,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Lists the most recent pending signups (any status) for the admin view, newest first.
