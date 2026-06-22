@@ -2,6 +2,7 @@ using CFS.Core.Models;
 using CFS.Core.Services;
 using CFS.Data;
 using CFS.Web.Components;
+using CFS.Web.Models;
 using CFS.Web.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -35,6 +36,7 @@ builder.Services.AddAuthorization();
 builder.Services.AddScoped<ITenantContext, HttpTenantContext>();
 builder.Services.AddHttpClient<IAiAdvisorService, OpenAiAdvisorService>();
 builder.Services.AddScoped<IStripeCheckoutService, StripeCheckoutService>();
+builder.Services.AddScoped<IExternalInvoiceService, ExternalInvoiceService>();
 
 var demoEnabled = builder.Configuration.GetValue("Demo:Enabled", false);
 if (demoEnabled)
@@ -43,6 +45,7 @@ if (demoEnabled)
     builder.Services.AddScoped<IAiUsageLimiter, DemoAiUsageLimiter>();
     builder.Services.AddScoped<IOrganizationLabelService, DemoOrganizationLabelService>();
     builder.Services.AddScoped<IBillingRepository, DemoBillingRepository>();
+    builder.Services.AddScoped<IExternalInvoiceRepository, DemoExternalInvoiceRepository>();
     builder.Services.AddScoped<ISignupRepository, DemoSignupRepository>();
     builder.Services.AddScoped<IDashboardRepository, DemoDashboardRepository>();
     builder.Services.AddScoped<IUserAuthenticationRepository, DemoUserAuthenticationRepository>();
@@ -62,6 +65,7 @@ else
     builder.Services.AddScoped<IAiUsageLimiter, SqlAiUsageLimiter>();
     builder.Services.AddScoped<IOrganizationLabelService, SqlOrganizationLabelService>();
     builder.Services.AddScoped<IBillingRepository, SqlBillingRepository>();
+    builder.Services.AddScoped<IExternalInvoiceRepository, SqlExternalInvoiceRepository>();
     builder.Services.AddScoped<ISignupRepository, SqlSignupRepository>();
     builder.Services.AddScoped<IDashboardRepository, SqlDashboardRepository>();
     builder.Services.AddScoped<IUserAuthenticationRepository, SqlUserAuthenticationRepository>();
@@ -103,18 +107,16 @@ app.MapPost("/api/stripe/webhook", async (HttpRequest request, IConfiguration co
     var json = await new StreamReader(request.Body).ReadToEndAsync();
     var webhookSecret = config["STRIPE_WEBHOOK_SECRET"];
 
+    if (string.IsNullOrWhiteSpace(webhookSecret))
+    {
+        logger.LogError("STRIPE_WEBHOOK_SECRET is not configured; rejecting webhook request instead of accepting it unverified.");
+        return Results.Problem(statusCode: 500);
+    }
+
     Stripe.Event stripeEvent;
     try
     {
-        if (string.IsNullOrWhiteSpace(webhookSecret))
-        {
-            logger.LogWarning("STRIPE_WEBHOOK_SECRET is not configured; accepting event without signature verification.");
-            stripeEvent = Stripe.EventUtility.ParseEvent(json);
-        }
-        else
-        {
-            stripeEvent = Stripe.EventUtility.ConstructEvent(json, request.Headers["Stripe-Signature"], webhookSecret);
-        }
+        stripeEvent = Stripe.EventUtility.ConstructEvent(json, request.Headers["Stripe-Signature"], webhookSecret);
     }
     catch (Stripe.StripeException ex)
     {
@@ -170,6 +172,69 @@ app.MapPost("/api/stripe/webhook", async (HttpRequest request, IConfiguration co
 
     return Results.Ok();
 }).AllowAnonymous();
+
+app.MapPost("/api/invoices", async (
+    HttpRequest httpRequest,
+    CreateInvoiceApiRequest body,
+    IExternalInvoiceRepository invoiceRepository,
+    IExternalInvoiceService invoiceService,
+    ILoggerFactory loggerFactory,
+    CancellationToken cancellationToken) =>
+{
+    var logger = loggerFactory.CreateLogger("ExternalInvoiceApi");
+
+    var apiKey = httpRequest.Headers["X-Api-Key"].ToString();
+    if (string.IsNullOrWhiteSpace(apiKey))
+    {
+        return Results.Problem(statusCode: 401, title: "Missing X-Api-Key header.");
+    }
+
+    var tenant = await invoiceRepository.FindTenantByApiKeyHashAsync(ApiKeyHasher.Hash(apiKey), cancellationToken);
+    if (tenant is null)
+    {
+        logger.LogWarning("Rejected /api/invoices call with unknown or revoked API key.");
+        return Results.Problem(statusCode: 401, title: "Invalid API key.");
+    }
+
+    if (string.IsNullOrWhiteSpace(body.RecipientName) ||
+        string.IsNullOrWhiteSpace(body.RecipientEmail) ||
+        string.IsNullOrWhiteSpace(body.Description) ||
+        body.Amount <= 0)
+    {
+        return Results.Problem(statusCode: 400, title: "RecipientName, RecipientEmail, Description, and a positive Amount are required.");
+    }
+
+    var amountCents = (int)Math.Round(body.Amount * 100, MidpointRounding.AwayFromZero);
+    var currency = string.IsNullOrWhiteSpace(body.Currency) ? "usd" : body.Currency.ToLowerInvariant();
+
+    var result = await invoiceService.CreateAndSendInvoiceAsync(
+        new CreateExternalInvoiceRequest(
+            tenant.TenantId,
+            body.RecipientName,
+            body.RecipientEmail,
+            amountCents,
+            currency,
+            body.Description,
+            body.ExternalReference),
+        cancellationToken);
+
+    var response = new CreateInvoiceApiResponse(
+        result.RequestId, result.Status, result.StripeInvoiceId, result.HostedInvoiceUrl, result.ErrorMessage);
+
+    return result.Status == "Failed" ? Results.Json(response, statusCode: 502) : Results.Json(response);
+}).AllowAnonymous();
+
+app.MapPost("/api/tenants/api-keys", async (
+    CreateApiKeyRequest body,
+    ClaimsPrincipal user,
+    IExternalInvoiceRepository invoiceRepository,
+    CancellationToken cancellationToken) =>
+{
+    var tenantId = int.Parse(user.FindFirst("TenantId")!.Value);
+    var apiKey = ApiKeyHasher.GenerateApiKey();
+    await invoiceRepository.CreateApiKeyAsync(tenantId, ApiKeyHasher.Hash(apiKey), body.Label, cancellationToken);
+    return Results.Json(new CreateApiKeyResponse(apiKey));
+}).RequireAuthorization(policy => policy.RequireRole("Administrador"));
 
 if (demoEnabled)
 {

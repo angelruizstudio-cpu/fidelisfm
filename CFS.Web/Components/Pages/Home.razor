@@ -253,7 +253,7 @@
     private bool isRedirectingToStripe;
     private string? checkoutError;
 
-    private const decimal AnnualDiscount = 0.10m;
+    private static readonly decimal AnnualDiscount = 1m / 6m;
 
     private void SetBillingCycle(BillingCycle cycle) => billingCycle = cycle;
 
