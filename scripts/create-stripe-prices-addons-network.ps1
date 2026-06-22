@@ -19,18 +19,20 @@ function New-StripePrice {
         [string]$LookupKey
     )
 
-    $productId = stripe products create `
+    $productJson = stripe products create `
         --name "$ProductName" `
         -d "metadata[app]=CFS" `
-        --query "id" -o json | ConvertFrom-Json
+        -o json
+    $productId = ($productJson | ConvertFrom-Json).id
 
-    $priceId = stripe prices create `
+    $priceJson = stripe prices create `
         --product "$productId" `
         --currency usd `
         --unit-amount "$AmountCents" `
         -d "recurring[interval]=month" `
         -d "lookup_key=$LookupKey" `
-        --query "id" -o json | ConvertFrom-Json
+        -o json
+    $priceId = ($priceJson | ConvertFrom-Json).id
 
     return $priceId
 }
