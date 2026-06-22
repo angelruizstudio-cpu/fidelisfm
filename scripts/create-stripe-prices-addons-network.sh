@@ -21,8 +21,7 @@ create_price() {
     local product_id
     product_id=$(stripe products create \
         --name "$product_name" \
-        -d "metadata[app]=CFS" \
-        -o json | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+        -d "metadata[app]=CFS" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
 
     local price_id
     price_id=$(stripe prices create \
@@ -30,8 +29,7 @@ create_price() {
         --currency usd \
         --unit-amount "$amount_cents" \
         -d "recurring[interval]=month" \
-        -d "lookup_key=$lookup_key" \
-        -o json | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+        -d "lookup_key=$lookup_key" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
 
     echo "$lookup_key=$price_id"
 }
