@@ -1,11 +1,30 @@
 ﻿@inject AuthenticationStateProvider AuthenticationStateProvider
 @inject ISubscriptionService SubscriptionService
+@inject ITenantAccessRepository TenantAccessRepository
 
 <nav class="qb-nav" aria-label="Navegación principal">
     <a class="brand" href="dashboard">
         <img class="brand-logo" src="images/fidelis-logo.png" alt="Fidelis Financial Management" />
         <span>Fidelis Financial Management</span>
     </a>
+
+    @if (accessibleTenants.Count > 1)
+    {
+        <details class="tenant-switcher">
+            <summary class="tenant-switcher-current">@CurrentTenantName</summary>
+            <div class="tenant-switcher-options">
+                @foreach (var tenant in accessibleTenants)
+                {
+                    <form method="post" action="@($"/switch-tenant/{tenant.TenantId}")">
+                        <AntiforgeryToken />
+                        <button type="submit" class="tenant-switcher-option" disabled="@(tenant.TenantId == activeTenantId)">
+                            @tenant.TenantName
+                        </button>
+                    </form>
+                }
+            </div>
+        </details>
+    }
 
     <a class="create-button" href="ingresos">
         <span aria-hidden="true">+</span>
@@ -83,12 +102,20 @@
 @code {
     private TenantSubscription? subscription;
     private bool isFounderAdmin;
+    private IReadOnlyList<TenantAccessOption> accessibleTenants = [];
+    private int activeTenantId;
+    private string CurrentTenantName =>
+        accessibleTenants.FirstOrDefault(t => t.TenantId == activeTenantId)?.TenantName ?? string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         subscription = await SubscriptionService.GetCurrentAsync(authState.User);
         isFounderAdmin = authState.User.FindFirst("TenantId")?.Value == "1" && authState.User.IsInRole("Administrador");
+
+        activeTenantId = int.TryParse(authState.User.FindFirst("TenantId")?.Value, out var tenantId) ? tenantId : 1;
+        var userId = int.TryParse(authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var id) ? id : 0;
+        accessibleTenants = await TenantAccessRepository.GetAccessibleTenantsAsync(userId);
     }
 
     private bool HasFeature(string featureKey) =>

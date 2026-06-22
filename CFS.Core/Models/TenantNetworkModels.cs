@@ -50,3 +50,14 @@ public sealed record UserTenantAccess(
     int UserId,
     int TenantId,
     IReadOnlyList<string> RoleKeys);
+
+/// <summary>
+/// A church a user can switch their active session into: their home church
+/// (ID_Usuario.ID_Tenant_FK) plus any granted via UserTenantAccess.
+/// </summary>
+public sealed record TenantAccessOption(
+    int TenantId,
+    string TenantName,
+    string PlanKey,
+    IReadOnlyList<string> Roles,
+    bool IsHomeTenant);

@@ -19,6 +19,16 @@ public sealed class DemoUserAuthenticationRepository : IUserAuthenticationReposi
     }
 }
 
+public sealed class DemoTenantAccessRepository : ITenantAccessRepository
+{
+    public Task<IReadOnlyList<TenantAccessOption>> GetAccessibleTenantsAsync(
+        int userId,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<TenantAccessOption>>([
+            new TenantAccessOption(DemoData.User.TenantId, DemoData.User.TenantName, DemoData.User.PlanKey, DemoData.User.Roles, true)
+        ]);
+}
+
 public sealed class DemoDashboardRepository : IDashboardRepository
 {
     public Task<DashboardSnapshot> GetSnapshotAsync(CancellationToken cancellationToken = default) =>
