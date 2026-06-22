@@ -16,6 +16,7 @@ public static class CfsFeatures
     public const string AiAnomalyDetection = "ai.anomaly_detection";
     public const string MultiChurch = "multi_church";
     public const string Audit = "audit";
+    public const string Checks = "checks";
     public const string CheckApprovals = "checks.approvals";
     public const string Documents = "documents";
     public const string ExcelExport = "integrations.excel_export";
@@ -59,6 +60,19 @@ public static class CfsAiQuotas
         CfsPlans.Pro => 200,
         CfsPlans.MultiChurch => 500,
         _ => 10
+    };
+}
+
+public static class CfsUserLimits
+{
+    public static int GetMaxUsers(string? planKey) => planKey?.ToLowerInvariant() switch
+    {
+        CfsPlans.Founder => int.MaxValue,
+        CfsPlans.Basic => 1,
+        CfsPlans.Standard => 3,
+        CfsPlans.Pro => 5,
+        CfsPlans.MultiChurch => int.MaxValue,
+        _ => 1
     };
 }
 

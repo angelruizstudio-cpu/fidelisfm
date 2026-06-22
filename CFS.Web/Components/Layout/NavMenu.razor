@@ -52,6 +52,9 @@
                 <span class="nav-icon" aria-hidden="true">−</span>
                 Egresos
             </NavLink>
+        }
+        @if (HasFeature(CfsFeatures.Checks))
+        {
             <NavLink class="nav-link" href="cheques">
                 <span class="nav-icon" aria-hidden="true">▤</span>
                 Cheques
