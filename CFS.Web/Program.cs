@@ -226,11 +226,13 @@ app.MapPost("/api/invoices", async (
 
 app.MapPost("/api/tenants/api-keys", async (
     CreateApiKeyRequest body,
+    ClaimsPrincipal user,
     IExternalInvoiceRepository invoiceRepository,
     CancellationToken cancellationToken) =>
 {
+    var tenantId = int.Parse(user.FindFirst("TenantId")!.Value);
     var apiKey = ApiKeyHasher.GenerateApiKey();
-    await invoiceRepository.CreateApiKeyAsync(body.TenantId, ApiKeyHasher.Hash(apiKey), body.Label, cancellationToken);
+    await invoiceRepository.CreateApiKeyAsync(tenantId, ApiKeyHasher.Hash(apiKey), body.Label, cancellationToken);
     return Results.Json(new CreateApiKeyResponse(apiKey));
 }).RequireAuthorization(policy => policy.RequireRole("Administrador"));
 

@@ -15,6 +15,6 @@ public sealed record CreateInvoiceApiResponse(
     string? HostedInvoiceUrl,
     string? ErrorMessage);
 
-public sealed record CreateApiKeyRequest(int TenantId, string? Label);
+public sealed record CreateApiKeyRequest(string? Label);
 
 public sealed record CreateApiKeyResponse(string ApiKey);
