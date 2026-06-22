@@ -117,6 +117,7 @@ VALUES
     ('ai.anomaly_detection'),
     ('multi_church'),
     ('audit'),
+    ('checks'),
     ('checks.approvals'),
     ('documents');
 
@@ -138,7 +139,7 @@ WHERE f.FeatureKey IN ('dashboard', 'income', 'expenses', 'deposits', 'reports.b
 INSERT INTO dbo.PlanFeatures (PlanKey, FeatureKey, Enabled)
 SELECT 'standard', FeatureKey, 1
 FROM @Features f
-WHERE f.FeatureKey IN ('dashboard', 'income', 'expenses', 'deposits', 'reconciliation', 'reports.basic', 'reports.advanced')
+WHERE f.FeatureKey IN ('dashboard', 'income', 'expenses', 'checks', 'deposits', 'reconciliation', 'reports.basic', 'reports.advanced')
   AND NOT EXISTS (
       SELECT 1 FROM dbo.PlanFeatures pf WHERE pf.PlanKey = 'standard' AND pf.FeatureKey = f.FeatureKey
   );
@@ -146,7 +147,7 @@ WHERE f.FeatureKey IN ('dashboard', 'income', 'expenses', 'deposits', 'reconcili
 INSERT INTO dbo.PlanFeatures (PlanKey, FeatureKey, Enabled)
 SELECT 'pro', FeatureKey, 1
 FROM @Features f
-WHERE f.FeatureKey IN ('dashboard', 'income', 'expenses', 'deposits', 'reconciliation', 'reports.basic', 'reports.advanced', 'ai.insights', 'ai.assistant.basic', 'audit', 'checks.approvals', 'documents')
+WHERE f.FeatureKey IN ('dashboard', 'income', 'expenses', 'checks', 'deposits', 'reconciliation', 'reports.basic', 'reports.advanced', 'ai.insights', 'ai.assistant.basic', 'audit', 'checks.approvals', 'documents')
   AND NOT EXISTS (
       SELECT 1 FROM dbo.PlanFeatures pf WHERE pf.PlanKey = 'pro' AND pf.FeatureKey = f.FeatureKey
   );
