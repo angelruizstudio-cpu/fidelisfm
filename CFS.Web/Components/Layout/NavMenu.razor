@@ -115,7 +115,16 @@
 
         activeTenantId = int.TryParse(authState.User.FindFirst("TenantId")?.Value, out var tenantId) ? tenantId : 1;
         var userId = int.TryParse(authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var id) ? id : 0;
-        accessibleTenants = await TenantAccessRepository.GetAccessibleTenantsAsync(userId);
+        try
+        {
+            accessibleTenants = await TenantAccessRepository.GetAccessibleTenantsAsync(userId);
+        }
+        catch (Exception)
+        {
+            // Keeps the shared layout (and every page that uses it) usable even if the
+            // UserTenantAccess/TenantNetworks tables aren't provisioned yet in this environment.
+            accessibleTenants = [];
+        }
     }
 
     private bool HasFeature(string featureKey) =>
