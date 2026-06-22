@@ -136,9 +136,18 @@
                             <li>@feature</li>
                         }
                     </ul>
-                    <button type="button" class="btn @(plan.Highlight ? "btn-primary" : "btn-outline-secondary")" @onclick="() => OpenCheckout(plan)">
-                        Escoger plan
-                    </button>
+                    @if (plan.IsCustomPricing)
+                    {
+                        <a class="btn btn-outline-secondary" href="mailto:ventas@fidelisfm.com?subject=Plan%20Multi-Iglesia">
+                            Contactar ventas
+                        </a>
+                    }
+                    else
+                    {
+                        <button type="button" class="btn @(plan.Highlight ? "btn-primary" : "btn-outline-secondary")" @onclick="() => OpenCheckout(plan)">
+                            Escoger plan
+                        </button>
+                    }
                 </article>
             }
         </div>
