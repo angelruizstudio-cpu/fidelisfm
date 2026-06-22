@@ -49,6 +49,7 @@ if (demoEnabled)
     builder.Services.AddScoped<ISignupRepository, DemoSignupRepository>();
     builder.Services.AddScoped<IDashboardRepository, DemoDashboardRepository>();
     builder.Services.AddScoped<IUserAuthenticationRepository, DemoUserAuthenticationRepository>();
+    builder.Services.AddScoped<ITenantAccessRepository, DemoTenantAccessRepository>();
     builder.Services.AddScoped<IIncomeRepository, DemoIncomeRepository>();
     builder.Services.AddScoped<IExpenseRepository, DemoExpenseRepository>();
     builder.Services.AddScoped<ICheckRepository, DemoCheckRepository>();
@@ -69,6 +70,7 @@ else
     builder.Services.AddScoped<ISignupRepository, SqlSignupRepository>();
     builder.Services.AddScoped<IDashboardRepository, SqlDashboardRepository>();
     builder.Services.AddScoped<IUserAuthenticationRepository, SqlUserAuthenticationRepository>();
+    builder.Services.AddScoped<ITenantAccessRepository, SqlTenantAccessRepository>();
     builder.Services.AddScoped<IIncomeRepository, SqlIncomeRepository>();
     builder.Services.AddScoped<IExpenseRepository, SqlExpenseRepository>();
     builder.Services.AddScoped<ICheckRepository, SqlCheckRepository>();
@@ -306,6 +308,39 @@ app.MapPost("/login", async (
         return Results.Redirect($"/login?error=database&returnUrl={Uri.EscapeDataString(GetSafeReturnUrl(returnUrl))}");
     }
 }).AllowAnonymous();
+
+app.MapPost("/switch-tenant/{tenantId:int}", async (
+    int tenantId,
+    ClaimsPrincipal user,
+    ITenantAccessRepository tenantAccessRepository,
+    HttpContext httpContext) =>
+{
+    var userId = int.Parse(user.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+    var accessibleTenants = await tenantAccessRepository.GetAccessibleTenantsAsync(userId, httpContext.RequestAborted);
+    var target = accessibleTenants.FirstOrDefault(t => t.TenantId == tenantId);
+    if (target is null)
+    {
+        return Results.Forbid();
+    }
+
+    var claims = new List<Claim>
+    {
+        new(ClaimTypes.NameIdentifier, userId.ToString()),
+        new(ClaimTypes.Name, user.FindFirst(ClaimTypes.Name)!.Value),
+        new("FullName", user.FindFirst("FullName")!.Value),
+        new("TenantId", target.TenantId.ToString()),
+        new("TenantName", target.TenantName),
+        new("PlanKey", target.PlanKey)
+    };
+    claims.AddRange(target.Roles.Select(role => new Claim(ClaimTypes.Role, role)));
+
+    await httpContext.SignInAsync(
+        CookieAuthenticationDefaults.AuthenticationScheme,
+        new ClaimsPrincipal(new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme)),
+        new AuthenticationProperties { IsPersistent = false });
+
+    return Results.Redirect("/dashboard");
+}).RequireAuthorization();
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
