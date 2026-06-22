@@ -103,18 +103,16 @@ app.MapPost("/api/stripe/webhook", async (HttpRequest request, IConfiguration co
     var json = await new StreamReader(request.Body).ReadToEndAsync();
     var webhookSecret = config["STRIPE_WEBHOOK_SECRET"];
 
+    if (string.IsNullOrWhiteSpace(webhookSecret))
+    {
+        logger.LogError("STRIPE_WEBHOOK_SECRET is not configured; rejecting webhook request instead of accepting it unverified.");
+        return Results.Problem(statusCode: 500);
+    }
+
     Stripe.Event stripeEvent;
     try
     {
-        if (string.IsNullOrWhiteSpace(webhookSecret))
-        {
-            logger.LogWarning("STRIPE_WEBHOOK_SECRET is not configured; accepting event without signature verification.");
-            stripeEvent = Stripe.EventUtility.ParseEvent(json);
-        }
-        else
-        {
-            stripeEvent = Stripe.EventUtility.ConstructEvent(json, request.Headers["Stripe-Signature"], webhookSecret);
-        }
+        stripeEvent = Stripe.EventUtility.ConstructEvent(json, request.Headers["Stripe-Signature"], webhookSecret);
     }
     catch (Stripe.StripeException ex)
     {
