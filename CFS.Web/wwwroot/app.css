@@ -899,6 +899,72 @@ a, .btn-link {
     margin-top: 0.4rem;
 }
 
+.metric-card-income,
+.metric-card-expense,
+.metric-card-balance {
+    border: none;
+    color: #ffffff;
+}
+
+.metric-card-income {
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+}
+
+.metric-card-expense {
+    background: linear-gradient(135deg, #ea580c, #c2410c);
+}
+
+.metric-card-balance {
+    background: linear-gradient(135deg, #16a34a, #15803d);
+}
+
+.metric-card-income span,
+.metric-card-expense span,
+.metric-card-balance span {
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.metric-card-income strong,
+.metric-card-expense strong,
+.metric-card-balance strong {
+    color: #ffffff;
+}
+
+.metric-card-income small,
+.metric-card-expense small,
+.metric-card-balance small {
+    color: rgba(255, 255, 255, 0.75);
+}
+
+.kpi-panel {
+    margin-bottom: 1rem;
+}
+
+.kpi-table th {
+    color: #5f6b7a;
+    font-size: 0.85rem;
+    font-weight: 700;
+}
+
+.kpi-change {
+    border-radius: 999px;
+    display: inline-flex;
+    font-size: 0.85rem;
+    font-weight: 700;
+    gap: 0.25rem;
+    padding: 0.2rem 0.6rem;
+}
+
+.kpi-up {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.kpi-down {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
 .dashboard-grid {
     display: grid;
     gap: 1rem;

@@ -34,20 +34,55 @@ else if (!string.IsNullOrWhiteSpace(errorMessage))
 else if (snapshot is not null)
 {
     <section class="metric-grid">
-        <div class="metric-card">
+        <div class="metric-card metric-card-income">
             <span>Ingresos YTD</span>
             <strong>@Money(snapshot.Summary.YearToDateIncome)</strong>
             <small>Año fiscal actual</small>
         </div>
-        <div class="metric-card">
+        <div class="metric-card metric-card-expense">
             <span>Gastos YTD</span>
             <strong>@Money(snapshot.Summary.YearToDateExpenses)</strong>
             <small>Incluye egresos registrados</small>
         </div>
-        <div class="metric-card">
+        <div class="metric-card metric-card-balance">
             <span>Balance YTD</span>
             <strong>@Money(snapshot.Summary.YearToDateBalance)</strong>
             <small>Ingresos menos gastos</small>
+        </div>
+    </section>
+
+    <section class="panel kpi-panel">
+        <div class="panel-heading">
+            <h2>Indicadores clave</h2>
+            <span>Mes actual vs. mes anterior</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table align-middle kpi-table">
+                <thead>
+                    <tr>
+                        <th>Indicador</th>
+                        <th class="text-end">Mes actual</th>
+                        <th class="text-end">Mes anterior</th>
+                        <th class="text-end">Cambio</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var kpi in snapshot.Kpis)
+                    {
+                        <tr>
+                            <td>@kpi.Label</td>
+                            <td class="text-end">@Money(kpi.CurrentMonth)</td>
+                            <td class="text-end">@Money(kpi.PreviousMonth)</td>
+                            <td class="text-end">
+                                <span class="kpi-change @(kpi.Increased ? "kpi-up" : "kpi-down")">
+                                    @(kpi.Increased ? "▲" : "▼")
+                                    @(kpi.ChangePercent is null ? "—" : $"{Math.Abs(kpi.ChangePercent.Value):0.0}%")
+                                </span>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
         </div>
     </section>
 
