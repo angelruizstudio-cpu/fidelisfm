@@ -8,6 +8,7 @@
 @inject NavigationManager Navigation
 @inject IStripeCheckoutService StripeCheckout
 @inject ISignupRepository Signups
+@inject ISalesLeadRepository SalesLeads
 @inject ILogger<Home> Logger
 
 <PageTitle>Fidelis Financial Management</PageTitle>
@@ -138,9 +139,9 @@
                     </ul>
                     @if (plan.IsCustomPricing)
                     {
-                        <a class="btn btn-outline-secondary" href="mailto:ventas@fidelisfm.com?subject=Plan%20Multi-Iglesia">
+                        <button type="button" class="btn btn-outline-secondary" @onclick="OpenLeadWizard">
                             Contactar ventas
-                        </a>
+                        </button>
                     }
                     else
                     {
@@ -246,6 +247,98 @@
                         </div>
                         <p class="checkout-fineprint">Impuestos no incluidos. Cancela cuando quieras.</p>
                     </aside>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (showLeadWizard)
+    {
+        <div class="checkout-overlay" role="dialog" aria-modal="true" aria-label="Contactar ventas">
+            <div class="checkout-modal">
+                <button type="button" class="checkout-close" aria-label="Cerrar" @onclick="CloseLeadWizard">×</button>
+
+                <ol class="checkout-steps">
+                    <li class="@(leadStep >= 1 ? "done" : "")"><span class="step-index">1</span> Tus datos</li>
+                    <li class="@(leadStep >= 2 ? "done" : "")"><span class="step-index">2</span> Tu organización</li>
+                    <li class="@(leadStep >= 3 ? "done" : "")"><span class="step-index">3</span> Listo</li>
+                </ol>
+
+                <div class="checkout-body">
+                    <div class="checkout-main">
+                        @if (leadStep == 1)
+                        {
+                            <h3>Cuéntanos cómo contactarte</h3>
+                            <EditForm Model="lead" OnValidSubmit="() => leadStep = 2">
+                                <DataAnnotationsValidator />
+                                <div class="checkout-field">
+                                    <label>Nombre de la organización</label>
+                                    <InputText @bind-Value="lead.OrganizationName" />
+                                </div>
+                                <div class="checkout-field">
+                                    <label>Nombre de contacto</label>
+                                    <InputText @bind-Value="lead.ContactName" />
+                                </div>
+                                <div class="checkout-field">
+                                    <label>Correo electrónico</label>
+                                    <InputText @bind-Value="lead.Email" type="email" />
+                                </div>
+                                <div class="checkout-field">
+                                    <label>Teléfono</label>
+                                    <InputText @bind-Value="lead.Phone" />
+                                </div>
+                                <button type="submit" class="btn btn-primary">Continuar</button>
+                            </EditForm>
+                        }
+                        else if (leadStep == 2)
+                        {
+                            <h3>Ayúdanos a entender tu necesidad</h3>
+                            <div class="checkout-field">
+                                <label>¿Cuántas iglesias administrarías?</label>
+                                <InputNumber @bind-Value="lead.ChurchCount" />
+                            </div>
+                            <div class="checkout-field">
+                                <label>¿Qué funciones te interesan?</label>
+                                @foreach (var feature in AvailableLeadFeatures)
+                                {
+                                    <label class="checkout-plan-option">
+                                        <input type="checkbox" checked="@lead.KeyFeatures.Contains(feature)" @onchange="@(e => ToggleLeadFeature(feature, (bool)e.Value!))" />
+                                        <span>@feature</span>
+                                    </label>
+                                }
+                            </div>
+                            <div class="checkout-field">
+                                <label>¿Cuándo te gustaría empezar?</label>
+                                <InputSelect @bind-Value="lead.Timeline">
+                                    <option value="Inmediato">Inmediato</option>
+                                    <option value="1-3 meses">1-3 meses</option>
+                                    <option value="3-6 meses">3-6 meses</option>
+                                    <option value="Explorando opciones">Explorando opciones</option>
+                                </InputSelect>
+                            </div>
+                            <div class="checkout-field">
+                                <label>Comentarios (opcional)</label>
+                                <InputTextArea @bind-Value="lead.Comments" />
+                            </div>
+                            <button type="button" class="btn btn-outline-secondary" @onclick="() => leadStep = 1">Atrás</button>
+                            <button type="button" class="btn btn-primary" @onclick="SubmitLeadAsync" disabled="@isSubmittingLead">
+                                @(isSubmittingLead ? "Enviando..." : "Enviar")
+                            </button>
+                            @if (leadError is not null)
+                            {
+                                <p class="checkout-error">@leadError</p>
+                            }
+                        }
+                        else
+                        {
+                            <h3>¡Gracias!</h3>
+                            <p>
+                                Hemos recibido tu información. Nuestro equipo de ventas se pondrá en contacto contigo pronto
+                                para platicar sobre el plan Multi-Iglesia.
+                            </p>
+                            <button type="button" class="btn btn-primary" @onclick="CloseLeadWizard">Cerrar</button>
+                        }
+                    </div>
                 </div>
             </div>
         </div>
@@ -426,5 +519,111 @@
         public string Email { get; set; } = "";
         public string Password { get; set; } = "";
         public string Phone { get; set; } = "";
+    }
+
+    private static readonly IReadOnlyList<string> AvailableLeadFeatures =
+    [
+        "Dashboard consolidado",
+        "Reportes por iglesia y consolidados",
+        "Administración central",
+        "Usuarios por iglesia",
+        "Cheques tipo voucher",
+        "Conciliación bancaria",
+        "Agente IA financiero"
+    ];
+
+    private bool showLeadWizard;
+    private int leadStep = 1;
+    private bool isSubmittingLead;
+    private string? leadError;
+    private readonly LeadProfile lead = new();
+
+    private void OpenLeadWizard()
+    {
+        showLeadWizard = true;
+        leadStep = 1;
+        leadError = null;
+    }
+
+    private void CloseLeadWizard()
+    {
+        showLeadWizard = false;
+        leadStep = 1;
+        leadError = null;
+        lead.Reset();
+    }
+
+    private void ToggleLeadFeature(string feature, bool isChecked)
+    {
+        if (isChecked)
+        {
+            if (!lead.KeyFeatures.Contains(feature))
+            {
+                lead.KeyFeatures.Add(feature);
+            }
+        }
+        else
+        {
+            lead.KeyFeatures.Remove(feature);
+        }
+    }
+
+    private async Task SubmitLeadAsync()
+    {
+        if (isSubmittingLead)
+        {
+            return;
+        }
+
+        isSubmittingLead = true;
+        leadError = null;
+
+        try
+        {
+            await SalesLeads.CreateAsync(new SalesLead(
+                lead.OrganizationName,
+                lead.ContactName,
+                lead.Email,
+                lead.Phone,
+                lead.ChurchCount,
+                lead.KeyFeatures,
+                lead.Timeline,
+                string.IsNullOrWhiteSpace(lead.Comments) ? null : lead.Comments));
+
+            leadStep = 3;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Sales lead submission failed");
+            leadError = "No pudimos enviar tu información. Intenta de nuevo en un momento.";
+        }
+        finally
+        {
+            isSubmittingLead = false;
+        }
+    }
+
+    private sealed class LeadProfile
+    {
+        public string OrganizationName { get; set; } = "";
+        public string ContactName { get; set; } = "";
+        public string Email { get; set; } = "";
+        public string Phone { get; set; } = "";
+        public int ChurchCount { get; set; } = 1;
+        public List<string> KeyFeatures { get; } = [];
+        public string Timeline { get; set; } = "Inmediato";
+        public string? Comments { get; set; }
+
+        public void Reset()
+        {
+            OrganizationName = "";
+            ContactName = "";
+            Email = "";
+            Phone = "";
+            ChurchCount = 1;
+            KeyFeatures.Clear();
+            Timeline = "Inmediato";
+            Comments = null;
+        }
     }
 }

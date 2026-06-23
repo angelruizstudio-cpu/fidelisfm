@@ -47,6 +47,7 @@ if (demoEnabled)
     builder.Services.AddScoped<IBillingRepository, DemoBillingRepository>();
     builder.Services.AddScoped<IExternalInvoiceRepository, DemoExternalInvoiceRepository>();
     builder.Services.AddScoped<ISignupRepository, DemoSignupRepository>();
+    builder.Services.AddScoped<ISalesLeadRepository, DemoSalesLeadRepository>();
     builder.Services.AddScoped<IDashboardRepository, DemoDashboardRepository>();
     builder.Services.AddScoped<IUserAuthenticationRepository, DemoUserAuthenticationRepository>();
     builder.Services.AddScoped<ITenantAccessRepository, DemoTenantAccessRepository>();
@@ -68,6 +69,7 @@ else
     builder.Services.AddScoped<IBillingRepository, SqlBillingRepository>();
     builder.Services.AddScoped<IExternalInvoiceRepository, SqlExternalInvoiceRepository>();
     builder.Services.AddScoped<ISignupRepository, SqlSignupRepository>();
+    builder.Services.AddScoped<ISalesLeadRepository, SqlSalesLeadRepository>();
     builder.Services.AddScoped<IDashboardRepository, SqlDashboardRepository>();
     builder.Services.AddScoped<IUserAuthenticationRepository, SqlUserAuthenticationRepository>();
     builder.Services.AddScoped<ITenantAccessRepository, SqlTenantAccessRepository>();
