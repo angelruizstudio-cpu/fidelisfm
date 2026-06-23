@@ -24,6 +24,8 @@ public sealed class SqlSubscriptionService(SqlConnectionFactory connectionFactor
         [CfsFeatures.AiAnomalyDetection] = "AI Anomaly Detection add-on",
         [CfsFeatures.MultiChurch] = "Multi-iglesia",
         [CfsFeatures.Audit] = "Auditoría",
+        [CfsFeatures.TrendAnalysis] = "Análisis de tendencias",
+        [CfsFeatures.Automation] = "Automatizaciones",
         [CfsFeatures.Checks] = "Cheques",
         [CfsFeatures.CheckApprovals] = "Aprobación de cheques",
         [CfsFeatures.Documents] = "Documentos adjuntos",

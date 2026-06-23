@@ -1,0 +1,244 @@
+@page "/automatizaciones"
+@rendermode InteractiveServer
+@inject IAutomationRepository AutomationRepository
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ISubscriptionService SubscriptionService
+
+<PageTitle>Fidelis Automatizaciones</PageTitle>
+
+<div class="screen-header">
+    <div>
+        <p class="eyebrow">Automatización</p>
+        <h1>Automatizaciones</h1>
+    </div>
+    <div class="quick-actions">
+        <button class="btn btn-secondary" @onclick="RunDueAsync" disabled="@(isLoading || isRunning)">Ejecutar ahora</button>
+    </div>
+</div>
+
+@if (isLoadingAccess)
+{
+    <div class="status-panel">Cargando permisos...</div>
+}
+else if (!hasAccess)
+{
+    <section class="ai-advisor-shell">
+        <div class="ai-empty-state">
+            <h2>Automatizaciones no disponible</h2>
+            <p>Esta función pertenece al plan Pro o Multi-Iglesia.</p>
+        </div>
+    </section>
+}
+else
+{
+    @if (!string.IsNullOrWhiteSpace(statusMessage))
+    {
+        <div class="alert @statusCss" role="alert">@statusMessage</div>
+    }
+
+    @if (runMessages.Count > 0)
+    {
+        <div class="alert alert-info" role="alert">
+            <ul>
+                @foreach (var message in runMessages)
+                {
+                    <li>@message</li>
+                }
+            </ul>
+        </div>
+    }
+
+    <section class="deposit-form">
+        <div class="receipt-grid">
+            <div class="field">
+                <label>Nombre de la regla</label>
+                <input class="form-control" @bind="entry.Name" />
+            </div>
+
+            <div class="field">
+                <label>Tipo</label>
+                <select class="form-select" @bind="entry.TransactionType">
+                    <option value="@AutomationTransactionType.Expense">Egreso</option>
+                    <option value="@AutomationTransactionType.Income">Ingreso</option>
+                </select>
+            </div>
+
+            <div class="field">
+                <label>Cuenta bancaria</label>
+                <select class="form-select" @bind="entry.AccountId">
+                    <option value="0">Selecciona...</option>
+                    @foreach (var account in lookups.Accounts)
+                    {
+                        <option value="@account.Id">@account.Name</option>
+                    }
+                </select>
+            </div>
+
+            <div class="field">
+                <label>Subcategoría</label>
+                <select class="form-select" @bind="entry.SubcategoryId">
+                    <option value="0">Selecciona...</option>
+                    @foreach (var subcategory in entry.TransactionType == AutomationTransactionType.Income ? lookups.IncomeSubcategories : lookups.ExpenseSubcategories)
+                    {
+                        <option value="@subcategory.Id">@subcategory.Name</option>
+                    }
+                </select>
+            </div>
+
+            <div class="field amount-field">
+                <label>Monto</label>
+                <input class="form-control" type="number" step="0.01" @bind="entry.Amount" />
+            </div>
+
+            <div class="field">
+                <label>Frecuencia</label>
+                <select class="form-select" @bind="entry.Frequency">
+                    <option value="@AutomationFrequency.Weekly">Semanal</option>
+                    <option value="@AutomationFrequency.BiWeekly">Quincenal</option>
+                    <option value="@AutomationFrequency.Monthly">Mensual</option>
+                </select>
+            </div>
+
+            <div class="field">
+                <label>Próxima ejecución</label>
+                <InputDate class="form-control" @bind-Value="entry.NextRunDate" />
+            </div>
+
+            <div class="field">
+                <label>Descripción (opcional)</label>
+                <input class="form-control" @bind="entry.Description" />
+            </div>
+        </div>
+
+        <button class="btn btn-primary" @onclick="SaveAsync" disabled="@isSaving">Guardar regla</button>
+    </section>
+
+    @if (isLoading)
+    {
+        <div class="status-panel">Cargando reglas...</div>
+    }
+    else
+    {
+        <section class="report-table-wrapper">
+            <table class="report-table">
+                <thead>
+                    <tr>
+                        <th>Regla</th>
+                        <th>Tipo</th>
+                        <th>Cuenta</th>
+                        <th>Subcategoría</th>
+                        <th>Monto</th>
+                        <th>Frecuencia</th>
+                        <th>Próxima ejecución</th>
+                        <th>Activa</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var rule in rules)
+                    {
+                        <tr>
+                            <td>@rule.Name</td>
+                            <td>@rule.TransactionType</td>
+                            <td>@rule.AccountName</td>
+                            <td>@rule.SubcategoryName</td>
+                            <td>@rule.Amount.ToString("C2")</td>
+                            <td>@rule.Frequency</td>
+                            <td>@rule.NextRunDate.ToString("MM/dd/yyyy")</td>
+                            <td>@(rule.Active ? "Sí" : "No")</td>
+                            <td>
+                                <button class="btn btn-sm btn-secondary" @onclick="() => ToggleActiveAsync(rule)">
+                                    @(rule.Active ? "Pausar" : "Activar")
+                                </button>
+                                <button class="btn btn-sm btn-danger" @onclick="() => DeleteAsync(rule)">Eliminar</button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </section>
+    }
+}
+
+@code {
+    private bool isLoadingAccess = true;
+    private bool hasAccess;
+    private bool isLoading = true;
+    private bool isSaving;
+    private bool isRunning;
+    private string? statusMessage;
+    private string statusCss = "alert-info";
+    private string userName = "demo";
+    private AutomationLookups lookups = new([], [], []);
+    private IReadOnlyList<AutomationRule> rules = [];
+    private List<string> runMessages = [];
+    private AutomationRuleEntry entry = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        hasAccess = await SubscriptionService.HasFeatureAsync(authState.User, CfsFeatures.Automation);
+        userName = authState.User.Identity?.Name ?? "demo";
+        isLoadingAccess = false;
+
+        if (hasAccess)
+        {
+            lookups = await AutomationRepository.GetLookupsAsync();
+            await LoadAsync();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+        rules = await AutomationRepository.GetRulesAsync();
+        isLoading = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(entry.Name) || entry.AccountId <= 0 || entry.SubcategoryId <= 0 || entry.Amount <= 0)
+        {
+            statusMessage = "Completa nombre, cuenta, subcategoría y monto.";
+            statusCss = "alert-warning";
+            return;
+        }
+
+        isSaving = true;
+        var result = await AutomationRepository.SaveAsync(entry, userName);
+        isSaving = false;
+
+        if (!result.Saved)
+        {
+            statusMessage = result.ErrorMessage ?? "No se pudo guardar la regla.";
+            statusCss = "alert-warning";
+            return;
+        }
+
+        statusMessage = "Regla guardada correctamente.";
+        statusCss = "alert-success";
+        entry = new AutomationRuleEntry();
+        await LoadAsync();
+    }
+
+    private async Task ToggleActiveAsync(AutomationRule rule)
+    {
+        await AutomationRepository.SetActiveAsync(rule.Id, !rule.Active);
+        await LoadAsync();
+    }
+
+    private async Task DeleteAsync(AutomationRule rule)
+    {
+        await AutomationRepository.DeleteAsync(rule.Id);
+        await LoadAsync();
+    }
+
+    private async Task RunDueAsync()
+    {
+        isRunning = true;
+        var result = await AutomationRepository.RunDueRulesAsync(userName);
+        runMessages = result.Messages.ToList();
+        isRunning = false;
+        await LoadAsync();
+    }
+}

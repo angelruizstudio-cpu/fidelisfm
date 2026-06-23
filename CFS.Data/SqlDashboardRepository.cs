@@ -21,6 +21,58 @@ public sealed class SqlDashboardRepository(SqlConnectionFactory connectionFactor
         return new DashboardSnapshot(summary, accounts, kpis, DateTime.Now);
     }
 
+    public async Task<IReadOnlyList<MonthlyTrendPoint>> GetMonthlyTrendsAsync(int months = 6, CancellationToken cancellationToken = default)
+    {
+        await using var connection = connectionFactory.Create();
+        await connection.OpenAsync(cancellationToken);
+
+        var start = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1).AddMonths(-(months - 1));
+
+        const string sql = """
+            SELECT
+                DATEFROMPARTS(YEAR(T.Fecha), MONTH(T.Fecha), 1) AS MonthStart,
+                K.TipoCategoria,
+                SUM(T.Monto) AS Total
+              FROM dbo.Transacciones T
+              JOIN dbo.Subcategorias S ON S.ID_Subcategoria = T.ID_Subcategoria_FK
+              JOIN dbo.Categorias K ON K.ID_Categoria = S.ID_Categoria_FK
+             WHERE T.Fecha >= @start
+               AND T.ID_Tenant_FK = @tenantId
+               AND ISNULL(T.Anulada, 0) = 0
+               AND K.TipoCategoria IN ('Ingreso', 'Egreso')
+             GROUP BY DATEFROMPARTS(YEAR(T.Fecha), MONTH(T.Fecha), 1), K.TipoCategoria
+             ORDER BY MonthStart;
+            """;
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@start", start);
+        command.Parameters.AddWithValue("@tenantId", _tenantId);
+
+        var totals = new Dictionary<DateTime, (decimal Income, decimal Expenses)>();
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+        {
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                var monthStart = reader.GetDateTime(0);
+                var category = reader.GetString(1);
+                var total = reader.GetDecimal(2);
+                var current = totals.GetValueOrDefault(monthStart);
+                totals[monthStart] = category == "Ingreso"
+                    ? (current.Income + total, current.Expenses)
+                    : (current.Income, current.Expenses + total);
+            }
+        }
+
+        var points = new List<MonthlyTrendPoint>();
+        for (var month = start; month <= new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1); month = month.AddMonths(1))
+        {
+            var (income, expenses) = totals.GetValueOrDefault(month);
+            points.Add(new MonthlyTrendPoint(month.ToString("MMM yyyy"), income, expenses));
+        }
+
+        return points;
+    }
+
     private static async Task<IReadOnlyList<KpiTrend>> GetKpiTrendsAsync(
         SqlConnection connection,
         int tenantId,

@@ -1,0 +1,89 @@
+@page "/tendencias"
+@rendermode InteractiveServer
+@inject IDashboardRepository DashboardRepository
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ISubscriptionService SubscriptionService
+
+<PageTitle>Fidelis Tendencias</PageTitle>
+
+<div class="screen-header">
+    <div>
+        <p class="eyebrow">Reportes</p>
+        <h1>Análisis de tendencias</h1>
+    </div>
+    <div class="quick-actions">
+        <button class="btn btn-primary" @onclick="LoadAsync" disabled="@isLoading">Actualizar</button>
+    </div>
+</div>
+
+@if (isLoadingAccess)
+{
+    <div class="status-panel">Cargando permisos...</div>
+}
+else if (!hasAccess)
+{
+    <section class="ai-advisor-shell">
+        <div class="ai-empty-state">
+            <h2>Análisis de tendencias no disponible</h2>
+            <p>Esta función pertenece al plan Pro o Multi-Iglesia.</p>
+        </div>
+    </section>
+}
+else if (isLoading)
+{
+    <div class="status-panel">Cargando tendencias...</div>
+}
+else
+{
+    <section class="report-table-wrapper">
+        <table class="report-table">
+            <thead>
+                <tr>
+                    <th>Mes</th>
+                    <th>Ingresos</th>
+                    <th>Gastos</th>
+                    <th>Neto</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var point in points)
+                {
+                    <tr>
+                        <td>@point.MonthLabel</td>
+                        <td>@Money(point.Income)</td>
+                        <td>@Money(point.Expenses)</td>
+                        <td>@Money(point.Income - point.Expenses)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </section>
+}
+
+@code {
+    private bool isLoadingAccess = true;
+    private bool hasAccess;
+    private bool isLoading = true;
+    private IReadOnlyList<MonthlyTrendPoint> points = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        hasAccess = await SubscriptionService.HasFeatureAsync(authState.User, CfsFeatures.TrendAnalysis);
+        isLoadingAccess = false;
+
+        if (hasAccess)
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+        points = await DashboardRepository.GetMonthlyTrendsAsync();
+        isLoading = false;
+    }
+
+    private static string Money(decimal value) => value.ToString("C2");
+}

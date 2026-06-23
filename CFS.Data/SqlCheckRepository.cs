@@ -191,6 +191,7 @@ public sealed class SqlCheckRepository(SqlConnectionFactory connectionFactory, I
             command.Parameters.Add("@user", SqlDbType.NVarChar, 100).Value = userName;
             command.Parameters.AddWithValue("@tenantId", _tenantId);
             var id = Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken));
+            await AuditLogger.TryLogAsync(connectionFactory, _tenantId, userName, "CREAR", "Cheque", id.ToString(), $"Cheque #{entry.CheckNumber} creado. Monto: {entry.Amount}", cancellationToken);
             return new CheckSaveResult(true, id, null);
         }
 
@@ -247,9 +248,13 @@ public sealed class SqlCheckRepository(SqlConnectionFactory connectionFactory, I
         command.Parameters.Add("@user", SqlDbType.NVarChar, 100).Value = userName;
         command.Parameters.AddWithValue("@tenantId", _tenantId);
         var affected = await command.ExecuteNonQueryAsync(cancellationToken);
-        return affected == 0
-            ? new CheckSaveResult(false, null, "No se pudo marcar el cheque como impreso.")
-            : new CheckSaveResult(true, id, null);
+        if (affected == 0)
+        {
+            return new CheckSaveResult(false, null, "No se pudo marcar el cheque como impreso.");
+        }
+
+        await AuditLogger.TryLogAsync(connectionFactory, _tenantId, userName, "IMPRIMIR", "Cheque", id.ToString(), "Cheque marcado como impreso.", cancellationToken);
+        return new CheckSaveResult(true, id, null);
     }
 
     public async Task<CheckSaveResult> VoidAsync(
@@ -283,9 +288,13 @@ public sealed class SqlCheckRepository(SqlConnectionFactory connectionFactory, I
         command.Parameters.Add("@reason", SqlDbType.NVarChar, 300).Value = reason.Trim();
         command.Parameters.AddWithValue("@tenantId", _tenantId);
         var affected = await command.ExecuteNonQueryAsync(cancellationToken);
-        return affected == 0
-            ? new CheckSaveResult(false, null, "No se pudo anular el cheque.")
-            : new CheckSaveResult(true, id, null);
+        if (affected == 0)
+        {
+            return new CheckSaveResult(false, null, "No se pudo anular el cheque.");
+        }
+
+        await AuditLogger.TryLogAsync(connectionFactory, _tenantId, userName, "ANULAR", "Cheque", id.ToString(), $"Cheque anulado. Motivo: {reason}", cancellationToken);
+        return new CheckSaveResult(true, id, null);
     }
 
     private static string? Validate(CheckEntry entry)
