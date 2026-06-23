@@ -56,33 +56,17 @@ else if (snapshot is not null)
             <h2>Indicadores clave</h2>
             <span>Mes actual vs. mes anterior</span>
         </div>
-        <div class="table-responsive">
-            <table class="table align-middle kpi-table">
-                <thead>
-                    <tr>
-                        <th>Indicador</th>
-                        <th class="text-end">Mes actual</th>
-                        <th class="text-end">Mes anterior</th>
-                        <th class="text-end">Cambio</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var kpi in snapshot.Kpis)
-                    {
-                        <tr>
-                            <td>@kpi.Label</td>
-                            <td class="text-end">@Money(kpi.CurrentMonth)</td>
-                            <td class="text-end">@Money(kpi.PreviousMonth)</td>
-                            <td class="text-end">
-                                <span class="kpi-change @(kpi.Increased ? "kpi-up" : "kpi-down")">
-                                    @(kpi.Increased ? "▲" : "▼")
-                                    @(kpi.ChangePercent is null ? "—" : $"{Math.Abs(kpi.ChangePercent.Value):0.0}%")
-                                </span>
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
+        <div class="kpi-headline-grid">
+            @foreach (var kpi in snapshot.Kpis)
+            {
+                <div class="kpi-headline">
+                    <span class="kpi-headline-label">@kpi.Label</span>
+                    <span class="kpi-headline-value @(kpi.Increased ? "kpi-up" : "kpi-down")">
+                        @(kpi.Increased ? "▲" : "▼")
+                        @(kpi.ChangePercent is null ? "—" : $"{Math.Abs(kpi.ChangePercent.Value):0.0}%")
+                    </span>
+                </div>
+            }
         </div>
     </section>
 
