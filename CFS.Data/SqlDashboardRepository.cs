@@ -29,7 +29,7 @@ public sealed class SqlDashboardRepository(SqlConnectionFactory connectionFactor
         var currentStart = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
         var currentEnd = DateTime.Today.AddDays(1);
         var previousStart = currentStart.AddMonths(-1);
-        var previousEnd = currentStart;
+        var previousEnd = previousStart.AddDays(DateTime.Today.Day);
 
         async Task<decimal> SumAsync(string categoryType, string? subcategoryLike, DateTime start, DateTime end)
         {
