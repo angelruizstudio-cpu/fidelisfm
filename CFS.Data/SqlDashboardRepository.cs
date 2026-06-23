@@ -16,8 +16,69 @@ public sealed class SqlDashboardRepository(SqlConnectionFactory connectionFactor
         var summary = await GetFinancialSummaryAsync(connection, _tenantId, cancellationToken);
         var hasStartDate = await HasAccountStartDateColumnAsync(connection, cancellationToken);
         var accounts = await GetBankAccountsAsync(connection, hasStartDate, _tenantId, cancellationToken);
+        var kpis = await GetKpiTrendsAsync(connection, _tenantId, cancellationToken);
 
-        return new DashboardSnapshot(summary, accounts, DateTime.Now);
+        return new DashboardSnapshot(summary, accounts, kpis, DateTime.Now);
+    }
+
+    private static async Task<IReadOnlyList<KpiTrend>> GetKpiTrendsAsync(
+        SqlConnection connection,
+        int tenantId,
+        CancellationToken cancellationToken)
+    {
+        var currentStart = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+        var currentEnd = DateTime.Today.AddDays(1);
+        var previousStart = currentStart.AddMonths(-1);
+        var previousEnd = currentStart;
+
+        async Task<decimal> SumAsync(string categoryType, string? subcategoryLike, DateTime start, DateTime end)
+        {
+            var filter = subcategoryLike is null
+                ? ""
+                : "AND LOWER(ISNULL(S.NombreSubcategoria, '')) LIKE @subcategoryLike";
+
+            var sql = $"""
+                SELECT ISNULL(SUM(T.Monto), 0)
+                  FROM Transacciones T
+                  JOIN Subcategorias S ON S.ID_Subcategoria = T.ID_Subcategoria_FK
+                  JOIN Categorias K ON K.ID_Categoria = S.ID_Categoria_FK
+                 WHERE T.Fecha >= @start AND T.Fecha < @end
+                   AND T.ID_Tenant_FK = @tenantId
+                   AND ISNULL(T.Anulada, 0) = 0
+                   AND K.TipoCategoria = @categoryType
+                   {filter};
+                """;
+
+            await using var command = new SqlCommand(sql, connection);
+            command.Parameters.AddWithValue("@start", start);
+            command.Parameters.AddWithValue("@end", end);
+            command.Parameters.AddWithValue("@tenantId", tenantId);
+            command.Parameters.AddWithValue("@categoryType", categoryType);
+            if (subcategoryLike is not null)
+            {
+                command.Parameters.AddWithValue("@subcategoryLike", subcategoryLike);
+            }
+
+            var value = await command.ExecuteScalarAsync(cancellationToken);
+            return value is null or DBNull ? 0 : Convert.ToDecimal(value);
+        }
+
+        var incomeCurrent = await SumAsync("Ingreso", null, currentStart, currentEnd);
+        var incomePrevious = await SumAsync("Ingreso", null, previousStart, previousEnd);
+        var expensesCurrent = await SumAsync("Egreso", null, currentStart, currentEnd);
+        var expensesPrevious = await SumAsync("Egreso", null, previousStart, previousEnd);
+        var tithesCurrent = await SumAsync("Ingreso", "%tithe%", currentStart, currentEnd);
+        var tithesPrevious = await SumAsync("Ingreso", "%tithe%", previousStart, previousEnd);
+        var devotionalCurrent = await SumAsync("Ingreso", "%devotional%", currentStart, currentEnd);
+        var devotionalPrevious = await SumAsync("Ingreso", "%devotional%", previousStart, previousEnd);
+
+        return
+        [
+            new KpiTrend("Ingresos", incomeCurrent, incomePrevious),
+            new KpiTrend("Gastos", expensesCurrent, expensesPrevious),
+            new KpiTrend("Diezmos", tithesCurrent, tithesPrevious),
+            new KpiTrend("Ofrendas Devocionales", devotionalCurrent, devotionalPrevious)
+        ];
     }
 
     private static async Task<FinancialSummary> GetFinancialSummaryAsync(
