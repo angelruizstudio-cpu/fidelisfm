@@ -940,28 +940,43 @@ a, .btn-link {
     margin-bottom: 1rem;
 }
 
-.kpi-table th {
+.kpi-headline-grid {
+    display: grid;
+    gap: 0.5rem;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    padding: 1.25rem 1rem;
+}
+
+.kpi-headline {
+    border-right: 1px solid #e5eaf0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    padding: 0 0.5rem;
+    text-align: center;
+}
+
+.kpi-headline:last-child {
+    border-right: none;
+}
+
+.kpi-headline-label {
     color: #5f6b7a;
     font-size: 0.85rem;
     font-weight: 700;
+    text-transform: uppercase;
 }
 
-.kpi-change {
-    border-radius: 999px;
-    display: inline-flex;
-    font-size: 0.85rem;
-    font-weight: 700;
-    gap: 0.25rem;
-    padding: 0.2rem 0.6rem;
+.kpi-headline-value {
+    font-size: 1.6rem;
+    font-weight: 800;
 }
 
-.kpi-up {
-    background: #dcfce7;
+.kpi-headline-value.kpi-up {
     color: #15803d;
 }
 
-.kpi-down {
-    background: #fee2e2;
+.kpi-headline-value.kpi-down {
     color: #b91c1c;
 }
 
