@@ -33,8 +33,113 @@ else if (isLoading)
 {
     <div class="status-panel">Cargando tendencias...</div>
 }
+else if (points.Count == 0)
+{
+    <div class="status-panel">Todavía no hay suficientes transacciones para mostrar una tendencia.</div>
+}
 else
 {
+    <section class="trend-toolbar">
+        <div class="trend-range-group">
+            @foreach (var option in monthOptions)
+            {
+                <button class="btn btn-sm @(monthsToShow == option ? "btn-primary" : "btn-outline-secondary")"
+                        @onclick="() => ChangeRangeAsync(option)">
+                    @option meses
+                </button>
+            }
+        </div>
+
+        <div class="trend-series-group">
+            <label class="trend-series-toggle series-income">
+                <input type="checkbox" @bind="showIncome" />
+                Ingresos
+            </label>
+            <label class="trend-series-toggle series-expenses">
+                <input type="checkbox" @bind="showExpenses" />
+                Gastos
+            </label>
+            <label class="trend-series-toggle series-net">
+                <input type="checkbox" @bind="showNet" />
+                Neto
+            </label>
+        </div>
+    </section>
+
+    <section class="trend-chart-shell">
+        <svg viewBox="0 0 @ChartWidth @ChartHeight" class="trend-chart" preserveAspectRatio="none">
+            @foreach (var y in GridLines())
+            {
+                <line x1="@PadLeft" y1="@y" x2="@(ChartWidth - PadRight)" y2="@y" class="trend-grid-line" />
+            }
+
+            @if (showIncome)
+            {
+                <polyline points="@BuildPolyline(p => p.Income)" class="trend-line trend-line-income" />
+            }
+            @if (showExpenses)
+            {
+                <polyline points="@BuildPolyline(p => p.Expenses)" class="trend-line trend-line-expenses" />
+            }
+            @if (showNet)
+            {
+                <polyline points="@BuildPolyline(p => p.Income - p.Expenses)" class="trend-line trend-line-net" />
+            }
+
+            @for (var i = 0; i < points.Count; i++)
+            {
+                var index = i;
+                var x = XForIndex(index);
+
+                @if (showIncome)
+                {
+                    <circle cx="@x" cy="@YForValue(points[index].Income)" r="@(hoveredIndex == index ? 6 : 4)"
+                            class="trend-point trend-point-income"
+                            @onmouseover="() => hoveredIndex = index" @onmouseout="() => hoveredIndex = null" />
+                }
+                @if (showExpenses)
+                {
+                    <circle cx="@x" cy="@YForValue(points[index].Expenses)" r="@(hoveredIndex == index ? 6 : 4)"
+                            class="trend-point trend-point-expenses"
+                            @onmouseover="() => hoveredIndex = index" @onmouseout="() => hoveredIndex = null" />
+                }
+                @if (showNet)
+                {
+                    <circle cx="@x" cy="@YForValue(points[index].Income - points[index].Expenses)" r="@(hoveredIndex == index ? 6 : 4)"
+                            class="trend-point trend-point-net"
+                            @onmouseover="() => hoveredIndex = index" @onmouseout="() => hoveredIndex = null" />
+                }
+
+                <rect x="@(x - HitWidth / 2)" y="0" width="@HitWidth" height="@ChartHeight" class="trend-hit-area"
+                      @onmouseover="() => hoveredIndex = index" @onmouseout="() => hoveredIndex = null" />
+
+                <g class="trend-axis-label" transform="translate(@(x.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)), @(ChartHeight - 6))">
+                    <text>@points[index].MonthLabel</text>
+                </g>
+            }
+        </svg>
+
+        @if (hoveredIndex is int hi)
+        {
+            var point = points[hi];
+            <div class="trend-tooltip" style="left: @(TooltipLeftPercent(hi))%;">
+                <strong>@point.MonthLabel</strong>
+                @if (showIncome)
+                {
+                    <div class="series-income">Ingresos: @Money(point.Income)</div>
+                }
+                @if (showExpenses)
+                {
+                    <div class="series-expenses">Gastos: @Money(point.Expenses)</div>
+                }
+                @if (showNet)
+                {
+                    <div class="series-net">Neto: @Money(point.Income - point.Expenses)</div>
+                }
+            </div>
+        }
+    </section>
+
     <section class="report-table-wrapper">
         <table class="report-table">
             <thead>
@@ -61,9 +166,24 @@ else
 }
 
 @code {
+    private const int ChartWidth = 800;
+    private const int ChartHeight = 320;
+    private const int PadLeft = 20;
+    private const int PadRight = 20;
+    private const int PadTop = 20;
+    private const int PadBottom = 30;
+    private const int HitWidth = 40;
+
+    private static readonly int[] monthOptions = [6, 12, 24];
+
     private bool isLoadingAccess = true;
     private bool hasAccess;
     private bool isLoading = true;
+    private int monthsToShow = 12;
+    private bool showIncome = true;
+    private bool showExpenses = true;
+    private bool showNet = true;
+    private int? hoveredIndex;
     private IReadOnlyList<MonthlyTrendPoint> points = [];
 
     protected override async Task OnInitializedAsync()
@@ -81,9 +201,76 @@ else
     private async Task LoadAsync()
     {
         isLoading = true;
-        points = await DashboardRepository.GetMonthlyTrendsAsync();
+        hoveredIndex = null;
+        points = await DashboardRepository.GetMonthlyTrendsAsync(monthsToShow);
         isLoading = false;
     }
+
+    private async Task ChangeRangeAsync(int months)
+    {
+        monthsToShow = months;
+        await LoadAsync();
+    }
+
+    private double XForIndex(int index)
+    {
+        if (points.Count <= 1)
+        {
+            return (ChartWidth - PadLeft - PadRight) / 2.0 + PadLeft;
+        }
+
+        var step = (ChartWidth - PadLeft - PadRight) / (double)(points.Count - 1);
+        return PadLeft + (step * index);
+    }
+
+    private double YForValue(decimal value)
+    {
+        var max = MaxAbsoluteValue();
+        if (max == 0)
+        {
+            return ChartHeight - PadBottom;
+        }
+
+        var usableHeight = ChartHeight - PadTop - PadBottom;
+        var ratio = (double)(value / max);
+        return ChartHeight - PadBottom - (ratio * usableHeight);
+    }
+
+    private decimal MaxAbsoluteValue()
+    {
+        decimal max = 0;
+        foreach (var point in points)
+        {
+            max = Math.Max(max, Math.Max(Math.Abs(point.Income), Math.Abs(point.Expenses)));
+        }
+
+        return max == 0 ? 1 : max;
+    }
+
+    private string BuildPolyline(Func<MonthlyTrendPoint, decimal> selector)
+    {
+        var parts = new List<string>(points.Count);
+        for (var i = 0; i < points.Count; i++)
+        {
+            var x = XForIndex(i).ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
+            var y = YForValue(selector(points[i])).ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
+            parts.Add($"{x},{y}");
+        }
+
+        return string.Join(" ", parts);
+    }
+
+    private IEnumerable<double> GridLines()
+    {
+        const int lines = 4;
+        var usableHeight = ChartHeight - PadTop - PadBottom;
+        for (var i = 0; i <= lines; i++)
+        {
+            yield return PadTop + (usableHeight / (double)lines * i);
+        }
+    }
+
+    private double TooltipLeftPercent(int index) => XForIndex(index) / ChartWidth * 100;
 
     private static string Money(decimal value) => value.ToString("C2");
 }

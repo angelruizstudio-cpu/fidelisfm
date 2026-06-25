@@ -3404,3 +3404,149 @@ h1:focus {
         grid-template-columns: 1fr;
     }
 }
+
+.trend-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.trend-range-group {
+    display: flex;
+    gap: 0.4rem;
+}
+
+.trend-series-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.trend-series-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
+.trend-chart-shell {
+    position: relative;
+    background: #fff;
+    border: 1px solid #e3e7ee;
+    border-radius: 12px;
+    padding: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.trend-chart {
+    width: 100%;
+    height: 320px;
+    display: block;
+    overflow: visible;
+}
+
+.trend-grid-line {
+    stroke: #edf0f5;
+    stroke-width: 1;
+}
+
+.trend-axis-label {
+    font-size: 11px;
+    fill: #6b7280;
+    text-anchor: middle;
+}
+
+.trend-axis-label text {
+    font-size: inherit;
+    fill: inherit;
+    text-anchor: inherit;
+}
+
+.trend-line {
+    fill: none;
+    stroke-width: 2.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.trend-line-income {
+    stroke: #2f9e44;
+}
+
+.trend-line-expenses {
+    stroke: #e03131;
+}
+
+.trend-line-net {
+    stroke: #1c7ed6;
+    stroke-dasharray: 6 4;
+}
+
+.trend-point {
+    stroke: #fff;
+    stroke-width: 1.5;
+    cursor: pointer;
+    transition: r 0.1s ease;
+}
+
+.trend-point-income {
+    fill: #2f9e44;
+}
+
+.trend-point-expenses {
+    fill: #e03131;
+}
+
+.trend-point-net {
+    fill: #1c7ed6;
+}
+
+.trend-hit-area {
+    fill: transparent;
+    cursor: pointer;
+}
+
+.trend-tooltip {
+    position: absolute;
+    top: 0.5rem;
+    transform: translateX(-50%);
+    background: #182232;
+    color: #fff;
+    padding: 0.5rem 0.75rem;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    line-height: 1.4;
+    pointer-events: none;
+    white-space: nowrap;
+    z-index: 5;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+}
+
+.trend-tooltip .series-income {
+    color: #69db7c;
+}
+
+.trend-tooltip .series-expenses {
+    color: #ff8787;
+}
+
+.trend-tooltip .series-net {
+    color: #74c0fc;
+}
+
+.trend-series-toggle.series-income {
+    color: #2f9e44;
+}
+
+.trend-series-toggle.series-expenses {
+    color: #e03131;
+}
+
+.trend-series-toggle.series-net {
+    color: #1c7ed6;
+}
