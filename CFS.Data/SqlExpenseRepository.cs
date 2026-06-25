@@ -445,7 +445,7 @@ public sealed class SqlExpenseRepository(SqlConnectionFactory connectionFactory,
         return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) > 0;
     }
 
-    private static async Task<int> InsertExpenseAsync(
+    private async Task<int> InsertExpenseAsync(
         SqlConnection connection,
         SqlTransaction transaction,
         ExpenseEntry entry,
@@ -480,7 +480,7 @@ public sealed class SqlExpenseRepository(SqlConnectionFactory connectionFactory,
         return id;
     }
 
-    private static async Task<int> UpdateExpenseAsync(
+    private async Task<int> UpdateExpenseAsync(
         SqlConnection connection,
         SqlTransaction transaction,
         ExpenseEntry entry,
@@ -583,7 +583,7 @@ public sealed class SqlExpenseRepository(SqlConnectionFactory connectionFactory,
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    private static async Task InsertLogAsync(
+    private async Task InsertLogAsync(
         SqlConnection connection,
         SqlTransaction transaction,
         int transactionId,
@@ -603,5 +603,7 @@ public sealed class SqlExpenseRepository(SqlConnectionFactory connectionFactory,
         command.Parameters.Add("@user", SqlDbType.VarChar, 100).Value = userName;
         command.Parameters.Add("@detail", SqlDbType.NVarChar).Value = detail;
         await command.ExecuteNonQueryAsync(cancellationToken);
+
+        await AuditLogger.TryLogAsync(connectionFactory, _tenantId, userName, action, "Egreso", transactionId.ToString(), detail, cancellationToken);
     }
 }

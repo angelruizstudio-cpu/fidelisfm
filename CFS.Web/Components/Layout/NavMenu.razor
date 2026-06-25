@@ -85,6 +85,27 @@
                 Reportes
             </NavLink>
         }
+        @if (HasFeature(CfsFeatures.Audit))
+        {
+            <NavLink class="nav-link" href="auditoria">
+                <span class="nav-icon" aria-hidden="true">⏱</span>
+                Auditoría
+            </NavLink>
+        }
+        @if (HasFeature(CfsFeatures.TrendAnalysis))
+        {
+            <NavLink class="nav-link" href="tendencias">
+                <span class="nav-icon" aria-hidden="true">📈</span>
+                Tendencias
+            </NavLink>
+        }
+        @if (HasFeature(CfsFeatures.Automation))
+        {
+            <NavLink class="nav-link" href="automatizaciones">
+                <span class="nav-icon" aria-hidden="true">⟲</span>
+                Automatizaciones
+            </NavLink>
+        }
         @if (subscription is not null && !subscription.IsFounderAccount)
         {
             <NavLink class="nav-link" href="configuracion/plan">
@@ -99,6 +120,14 @@
                 Signups
             </NavLink>
         }
+    </div>
+
+    <div class="nav-footer">
+        <a class="nav-footer-link" href="mailto:soporte@fidelisfm.com">
+            <span class="nav-icon" aria-hidden="true">?</span>
+            Soporte
+        </a>
+        <span class="nav-footer-version">Fidelis Financial Management</span>
     </div>
 </nav>
 

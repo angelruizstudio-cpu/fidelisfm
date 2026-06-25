@@ -16,6 +16,8 @@ public static class CfsFeatures
     public const string AiAnomalyDetection = "ai.anomaly_detection";
     public const string MultiChurch = "multi_church";
     public const string Audit = "audit";
+    public const string TrendAnalysis = "reports.trend_analysis";
+    public const string Automation = "automation.recurring";
     public const string Checks = "checks";
     public const string CheckApprovals = "checks.approvals";
     public const string Documents = "documents";

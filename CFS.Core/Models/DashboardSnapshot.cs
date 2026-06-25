@@ -6,3 +6,5 @@ public sealed record DashboardSnapshot(
     IReadOnlyList<KpiTrend> Kpis,
     DateTime LoadedAt);
 
+public sealed record MonthlyTrendPoint(string MonthLabel, decimal Income, decimal Expenses);
+

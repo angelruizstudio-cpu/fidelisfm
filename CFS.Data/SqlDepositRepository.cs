@@ -151,6 +151,7 @@ public sealed class SqlDepositRepository(SqlConnectionFactory connectionFactory,
             }
 
             await transaction.CommitAsync(cancellationToken);
+            await AuditLogger.TryLogAsync(connectionFactory, _tenantId, userName, "CREAR", "Deposito", result.DepositId?.ToString(), $"Nuevo deposito creado. Monto: {entry.ActualTotal}", cancellationToken);
             return new DepositSaveResult(true, result.DepositId, null);
         }
         catch (Exception ex)
@@ -312,6 +313,7 @@ public sealed class SqlDepositRepository(SqlConnectionFactory connectionFactory,
             }
 
             await transaction.CommitAsync(cancellationToken);
+            await AuditLogger.TryLogAsync(connectionFactory, _tenantId, userName, "ANULAR", "Deposito", id.ToString(), $"Deposito anulado. Motivo: {reason}", cancellationToken);
             return new DepositSaveResult(true, id, null);
         }
         catch (Exception ex)

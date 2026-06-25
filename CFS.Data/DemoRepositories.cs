@@ -42,6 +42,23 @@ public sealed class DemoDashboardRepository : IDashboardRepository
                 new KpiTrend("Ofrendas Devocionales", 1_005.62m, 858.82m)
             ],
             DateTime.Now));
+
+    public Task<IReadOnlyList<MonthlyTrendPoint>> GetMonthlyTrendsAsync(int months = 6, CancellationToken cancellationToken = default)
+    {
+        var points = new List<MonthlyTrendPoint>();
+        var start = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1).AddMonths(-(months - 1));
+        var income = 11_000m;
+        var expenses = 7_500m;
+
+        for (var month = start; month <= new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1); month = month.AddMonths(1))
+        {
+            points.Add(new MonthlyTrendPoint(month.ToString("MMM yyyy"), income, expenses));
+            income += 350m;
+            expenses += 180m;
+        }
+
+        return Task.FromResult<IReadOnlyList<MonthlyTrendPoint>>(points);
+    }
 }
 
 public sealed class DemoIncomeRepository : IIncomeRepository
@@ -577,6 +594,59 @@ public sealed class DemoReportRepository : IReportRepository
         result.Add(new ReportLine($"Total:{label}", label, total, 0, true, true, []));
         return result;
     }
+}
+
+public sealed class DemoAuditLogRepository : IAuditLogRepository
+{
+    private static readonly List<AuditLogEntry> Entries =
+    [
+        new(5, DateTime.Now.AddHours(-1), "demo", "CREAR", "Ingreso", "1042", "Nuevo ingreso creado. Monto: 250.00, Subcategoria: Diezmos"),
+        new(4, DateTime.Now.AddHours(-3), "demo", "CREAR", "Cheque", "88", "Cheque #1088 creado. Monto: 540.00"),
+        new(3, DateTime.Now.AddDays(-1), "demo", "ANULAR", "Egreso", "771", "Egreso anulado. Motivo: Duplicado"),
+        new(2, DateTime.Now.AddDays(-2), "demo", "CREAR", "Deposito", "210", "Nuevo deposito creado. Monto: 1325.50"),
+        new(1, DateTime.Now.AddDays(-3), "demo", "IMPRIMIR", "Cheque", "87", "Cheque marcado como impreso.")
+    ];
+
+    public Task LogAsync(
+        string action,
+        string entityType,
+        string? entityReference,
+        string detail,
+        string userName,
+        CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+    public Task<IReadOnlyList<AuditLogEntry>> GetRecentAsync(int take = 200, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<AuditLogEntry>>(Entries.Take(take).ToList());
+}
+
+public sealed class DemoAutomationRepository : IAutomationRepository
+{
+    private static readonly List<AutomationRule> Rules =
+    [
+        new(1, "Renta del templo", AutomationTransactionType.Expense, 1, "Checking-6163", 10, "Renta",
+            450m, AutomationFrequency.Monthly, DateTime.Today.AddDays(5), "Pago mensual de renta", true),
+        new(2, "Diezmo recurrente - Familia Pérez", AutomationTransactionType.Income, 1, "Checking-6163", 1, "Diezmos",
+            100m, AutomationFrequency.BiWeekly, DateTime.Today.AddDays(2), null, true)
+    ];
+
+    public Task<AutomationLookups> GetLookupsAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(new AutomationLookups(
+            DemoData.Accounts,
+            DemoData.IncomeSubcategories,
+            [new LookupOption(10, "Renta"), new LookupOption(11, "Utilidades")]));
+
+    public Task<IReadOnlyList<AutomationRule>> GetRulesAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<AutomationRule>>(Rules.ToList());
+
+    public Task<AutomationSaveResult> SaveAsync(AutomationRuleEntry entry, string userName, CancellationToken cancellationToken = default) =>
+        Task.FromResult(new AutomationSaveResult(true, entry.Id > 0 ? entry.Id : Rules.Count + 1, null));
+
+    public Task<bool> SetActiveAsync(int id, bool active, CancellationToken cancellationToken = default) => Task.FromResult(true);
+
+    public Task<bool> DeleteAsync(int id, CancellationToken cancellationToken = default) => Task.FromResult(true);
+
+    public Task<AutomationRunResult> RunDueRulesAsync(string userName, CancellationToken cancellationToken = default) =>
+        Task.FromResult(new AutomationRunResult(0, ["Modo demo: las automatizaciones no generan transacciones reales."]));
 }
 
 internal static class DemoData

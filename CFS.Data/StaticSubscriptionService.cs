@@ -22,6 +22,8 @@ public sealed class StaticSubscriptionService : ISubscriptionService
         [CfsFeatures.AiAnomalyDetection] = "AI Anomaly Detection add-on",
         [CfsFeatures.MultiChurch] = "Multi-iglesia",
         [CfsFeatures.Audit] = "Auditoría",
+        [CfsFeatures.TrendAnalysis] = "Análisis de tendencias",
+        [CfsFeatures.Automation] = "Automatizaciones",
         [CfsFeatures.Checks] = "Cheques",
         [CfsFeatures.CheckApprovals] = "Aprobación de cheques",
         [CfsFeatures.Documents] = "Documentos adjuntos",
@@ -63,6 +65,8 @@ public sealed class StaticSubscriptionService : ISubscriptionService
             CfsFeatures.AiInsights,
             CfsFeatures.AiAssistantBasic,
             CfsFeatures.Audit,
+            CfsFeatures.TrendAnalysis,
+            CfsFeatures.Automation,
             CfsFeatures.CheckApprovals,
             CfsFeatures.Documents
         ],
@@ -82,6 +86,8 @@ public sealed class StaticSubscriptionService : ISubscriptionService
             CfsFeatures.AiMonthlyReview,
             CfsFeatures.AiAnomalyDetection,
             CfsFeatures.Audit,
+            CfsFeatures.TrendAnalysis,
+            CfsFeatures.Automation,
             CfsFeatures.CheckApprovals,
             CfsFeatures.Documents,
             CfsFeatures.MultiChurch

@@ -49,6 +49,7 @@ if (demoEnabled)
     builder.Services.AddScoped<ISignupRepository, DemoSignupRepository>();
     builder.Services.AddScoped<ISalesLeadRepository, DemoSalesLeadRepository>();
     builder.Services.AddScoped<IDashboardRepository, DemoDashboardRepository>();
+    builder.Services.AddScoped<IAuditLogRepository, DemoAuditLogRepository>();
     builder.Services.AddScoped<IUserAuthenticationRepository, DemoUserAuthenticationRepository>();
     builder.Services.AddScoped<ITenantAccessRepository, DemoTenantAccessRepository>();
     builder.Services.AddScoped<IIncomeRepository, DemoIncomeRepository>();
@@ -58,6 +59,7 @@ if (demoEnabled)
     builder.Services.AddScoped<IDepositRepository, DemoDepositRepository>();
     builder.Services.AddScoped<IReconciliationRepository, DemoReconciliationRepository>();
     builder.Services.AddScoped<IReportRepository, DemoReportRepository>();
+    builder.Services.AddScoped<IAutomationRepository, DemoAutomationRepository>();
 }
 else
 {
@@ -71,6 +73,7 @@ else
     builder.Services.AddScoped<ISignupRepository, SqlSignupRepository>();
     builder.Services.AddScoped<ISalesLeadRepository, SqlSalesLeadRepository>();
     builder.Services.AddScoped<IDashboardRepository, SqlDashboardRepository>();
+    builder.Services.AddScoped<IAuditLogRepository, SqlAuditLogRepository>();
     builder.Services.AddScoped<IUserAuthenticationRepository, SqlUserAuthenticationRepository>();
     builder.Services.AddScoped<ITenantAccessRepository, SqlTenantAccessRepository>();
     builder.Services.AddScoped<IIncomeRepository, SqlIncomeRepository>();
@@ -80,6 +83,7 @@ else
     builder.Services.AddScoped<IDepositRepository, SqlDepositRepository>();
     builder.Services.AddScoped<IReconciliationRepository, SqlReconciliationRepository>();
     builder.Services.AddScoped<IReportRepository, SqlReportRepository>();
+    builder.Services.AddScoped<IAutomationRepository, SqlAutomationRepository>();
 }
 
 var app = builder.Build();

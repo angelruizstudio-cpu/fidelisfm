@@ -1,0 +1,98 @@
+@page "/auditoria"
+@rendermode InteractiveServer
+@inject IAuditLogRepository AuditLogRepository
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ISubscriptionService SubscriptionService
+
+<PageTitle>Fidelis Auditoría</PageTitle>
+
+<div class="screen-header">
+    <div>
+        <p class="eyebrow">Control</p>
+        <h1>Auditoría</h1>
+    </div>
+    <div class="quick-actions">
+        <button class="btn btn-primary" @onclick="LoadAsync" disabled="@isLoading">Actualizar</button>
+    </div>
+</div>
+
+@if (isLoadingAccess)
+{
+    <div class="status-panel">Cargando permisos...</div>
+}
+else if (!hasAccess)
+{
+    <section class="ai-advisor-shell">
+        <div class="ai-empty-state">
+            <h2>Auditoría no disponible</h2>
+            <p>Esta función pertenece al plan Pro o Multi-Iglesia.</p>
+        </div>
+    </section>
+}
+else if (isLoading)
+{
+    <div class="status-panel">Cargando historial de auditoría...</div>
+}
+else
+{
+    <section class="report-table-wrapper">
+        @if (entries.Count == 0)
+        {
+            <div class="status-panel">Todavía no hay actividad registrada.</div>
+        }
+        else
+        {
+            <table class="report-table">
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Usuario</th>
+                        <th>Acción</th>
+                        <th>Módulo</th>
+                        <th>Referencia</th>
+                        <th>Detalle</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var entry in entries)
+                    {
+                        <tr>
+                            <td>@entry.CreatedAt.ToLocalTime().ToString("MM/dd/yyyy hh:mm tt")</td>
+                            <td>@entry.UserName</td>
+                            <td>@entry.Action</td>
+                            <td>@entry.EntityType</td>
+                            <td>@(entry.EntityReference ?? "-")</td>
+                            <td>@entry.Detail</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </section>
+}
+
+@code {
+    private bool isLoadingAccess = true;
+    private bool hasAccess;
+    private bool isLoading = true;
+    private IReadOnlyList<AuditLogEntry> entries = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        hasAccess = await SubscriptionService.HasFeatureAsync(authState.User, CfsFeatures.Audit);
+        isLoadingAccess = false;
+
+        if (hasAccess)
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+        entries = await AuditLogRepository.GetRecentAsync();
+        isLoading = false;
+    }
+}

@@ -117,6 +117,8 @@ VALUES
     ('ai.anomaly_detection'),
     ('multi_church'),
     ('audit'),
+    ('reports.trend_analysis'),
+    ('automation.recurring'),
     ('checks'),
     ('checks.approvals'),
     ('documents');
@@ -147,7 +149,7 @@ WHERE f.FeatureKey IN ('dashboard', 'income', 'expenses', 'checks', 'deposits', 
 INSERT INTO dbo.PlanFeatures (PlanKey, FeatureKey, Enabled)
 SELECT 'pro', FeatureKey, 1
 FROM @Features f
-WHERE f.FeatureKey IN ('dashboard', 'income', 'expenses', 'checks', 'deposits', 'reconciliation', 'reports.basic', 'reports.advanced', 'ai.insights', 'ai.assistant.basic', 'audit', 'checks.approvals', 'documents')
+WHERE f.FeatureKey IN ('dashboard', 'income', 'expenses', 'checks', 'deposits', 'reconciliation', 'reports.basic', 'reports.advanced', 'ai.insights', 'ai.assistant.basic', 'audit', 'reports.trend_analysis', 'automation.recurring', 'checks.approvals', 'documents')
   AND NOT EXISTS (
       SELECT 1 FROM dbo.PlanFeatures pf WHERE pf.PlanKey = 'pro' AND pf.FeatureKey = f.FeatureKey
   );
