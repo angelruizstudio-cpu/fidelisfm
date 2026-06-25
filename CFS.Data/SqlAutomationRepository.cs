@@ -63,22 +63,31 @@ public sealed class SqlAutomationRepository(SqlConnectionFactory connectionFacto
         command.Parameters.AddWithValue("@tenantId", _tenantId);
 
         var rules = new List<AutomationRule>();
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
+
+        try
         {
-            rules.Add(new AutomationRule(
-                reader.GetInt32(0),
-                reader.GetString(1),
-                reader.GetString(2),
-                reader.GetInt32(3),
-                reader.GetString(4),
-                reader.GetInt32(5),
-                reader.GetString(6),
-                reader.GetDecimal(7),
-                reader.GetString(8),
-                reader.GetDateTime(9),
-                reader.IsDBNull(10) ? null : reader.GetString(10),
-                reader.GetBoolean(11)));
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                rules.Add(new AutomationRule(
+                    reader.GetInt32(0),
+                    reader.GetString(1),
+                    reader.GetString(2),
+                    reader.GetInt32(3),
+                    reader.GetString(4),
+                    reader.GetInt32(5),
+                    reader.GetString(6),
+                    reader.GetDecimal(7),
+                    reader.GetString(8),
+                    reader.GetDateTime(9),
+                    reader.IsDBNull(10) ? null : reader.GetString(10),
+                    reader.GetBoolean(11)));
+            }
+        }
+        catch (SqlException ex) when (ex.Number == 208)
+        {
+            // dbo.CFS_AutomationRules migration not applied yet in this environment.
+            return rules;
         }
 
         return rules;
@@ -178,6 +187,8 @@ public sealed class SqlAutomationRepository(SqlConnectionFactory connectionFacto
 
         var due = new List<(int Id, string Name, string Type, int AccountId, int SubcategoryId, decimal Amount, string Frequency, DateTime NextRunDate, string? Description)>();
 
+        try
+        {
         await using (var command = new SqlCommand(dueSql, connection))
         {
             command.Parameters.AddWithValue("@tenantId", _tenantId);
@@ -196,6 +207,12 @@ public sealed class SqlAutomationRepository(SqlConnectionFactory connectionFacto
                     reader.GetDateTime(7),
                     reader.IsDBNull(8) ? null : reader.GetString(8)));
             }
+        }
+        }
+        catch (SqlException ex) when (ex.Number == 208)
+        {
+            // dbo.CFS_AutomationRules migration not applied yet in this environment.
+            return new AutomationRunResult(0, ["La automatización aún no está disponible en este ambiente."]);
         }
 
         var messages = new List<string>();

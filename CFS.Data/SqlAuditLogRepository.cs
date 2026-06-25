@@ -52,17 +52,26 @@ public sealed class SqlAuditLogRepository(SqlConnectionFactory connectionFactory
         command.Parameters.Add("@tenantId", SqlDbType.Int).Value = _tenantId;
 
         var result = new List<AuditLogEntry>();
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
+
+        try
         {
-            result.Add(new AuditLogEntry(
-                reader.GetInt32(0),
-                reader.GetDateTime(1),
-                reader.GetString(2),
-                reader.GetString(3),
-                reader.GetString(4),
-                reader.IsDBNull(5) ? null : reader.GetString(5),
-                reader.GetString(6)));
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                result.Add(new AuditLogEntry(
+                    reader.GetInt32(0),
+                    reader.GetDateTime(1),
+                    reader.GetString(2),
+                    reader.GetString(3),
+                    reader.GetString(4),
+                    reader.IsDBNull(5) ? null : reader.GetString(5),
+                    reader.GetString(6)));
+            }
+        }
+        catch (SqlException ex) when (ex.Number == 208)
+        {
+            // dbo.CFS_AuditLog migration not applied yet in this environment.
+            return result;
         }
 
         return result;
