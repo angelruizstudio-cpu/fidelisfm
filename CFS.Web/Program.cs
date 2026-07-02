@@ -60,6 +60,7 @@ if (demoEnabled)
     builder.Services.AddScoped<IReconciliationRepository, DemoReconciliationRepository>();
     builder.Services.AddScoped<IReportRepository, DemoReportRepository>();
     builder.Services.AddScoped<IAutomationRepository, DemoAutomationRepository>();
+    builder.Services.AddScoped<IUserManagementRepository, DemoUserManagementRepository>();
 }
 else
 {
@@ -84,7 +85,10 @@ else
     builder.Services.AddScoped<IReconciliationRepository, SqlReconciliationRepository>();
     builder.Services.AddScoped<IReportRepository, SqlReportRepository>();
     builder.Services.AddScoped<IAutomationRepository, SqlAutomationRepository>();
+    builder.Services.AddScoped<IUserManagementRepository, SqlUserManagementRepository>();
 }
+
+builder.Services.AddScoped<IEmailService, SmtpEmailService>();
 
 var app = builder.Build();
 
@@ -296,7 +300,8 @@ app.MapPost("/login", async (
             new("FullName", user.FullName),
             new("TenantId", user.TenantId.ToString()),
             new("TenantName", user.TenantName),
-            new("PlanKey", user.PlanKey)
+            new("PlanKey", user.PlanKey),
+            new("MustChangePassword", user.MustChangePassword ? "true" : "false")
         };
 
         claims.AddRange(user.Roles.Select(role => new Claim(ClaimTypes.Role, role)));
@@ -306,6 +311,11 @@ app.MapPost("/login", async (
             CookieAuthenticationDefaults.AuthenticationScheme,
             new ClaimsPrincipal(identity),
             new AuthenticationProperties { IsPersistent = false });
+
+        if (user.MustChangePassword)
+        {
+            return Results.Redirect("/cambiar-contrasena?first=true");
+        }
 
         return Results.Redirect(GetSafeReturnUrl(returnUrl));
     }
@@ -347,6 +357,24 @@ app.MapPost("/switch-tenant/{tenantId:int}", async (
 
     return Results.Redirect("/dashboard");
 }).RequireAuthorization();
+
+app.MapPost("/api/password/reset", async (
+    [FromForm] string? token,
+    [FromForm] string? newPassword,
+    [FromForm] string? confirmPassword,
+    IUserManagementRepository userManagement,
+    HttpContext httpContext) =>
+{
+    if (string.IsNullOrWhiteSpace(token) || string.IsNullOrWhiteSpace(newPassword) || newPassword != confirmPassword)
+    {
+        return Results.Redirect($"/cambiar-contrasena?token={Uri.EscapeDataString(token ?? string.Empty)}&error=invalid");
+    }
+
+    var ok = await userManagement.ConsumeResetTokenAsync(token, newPassword, httpContext.RequestAborted);
+    return ok
+        ? Results.Redirect("/login?msg=passwordset")
+        : Results.Redirect($"/cambiar-contrasena?token={Uri.EscapeDataString(token)}&error=expired");
+}).AllowAnonymous();
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

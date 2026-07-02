@@ -7,4 +7,6 @@ public sealed record AuthenticatedUser(
     IReadOnlyList<string> Roles,
     int TenantId = 1,
     string TenantName = "Iglesia Cristiana Pentecostes Inc",
-    string PlanKey = CfsPlans.Founder);
+    string PlanKey = CfsPlans.Founder,
+    bool MustChangePassword = false,
+    string? Email = null);
