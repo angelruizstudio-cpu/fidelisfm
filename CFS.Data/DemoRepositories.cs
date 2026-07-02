@@ -649,6 +649,42 @@ public sealed class DemoAutomationRepository : IAutomationRepository
         Task.FromResult(new AutomationRunResult(0, ["Modo demo: las automatizaciones no generan transacciones reales."]));
 }
 
+public sealed class DemoUserManagementRepository : IUserManagementRepository
+{
+    private static readonly List<TenantUser> Users =
+    [
+        new(1, "demo", "Pastor Demo", "demo@iglesia.org", true, false, ["Administrador"]),
+        new(2, "tesorero", "Ana García", "ana@iglesia.org", true, false, ["Tesorero"]),
+    ];
+
+    public Task<IReadOnlyList<TenantUser>> GetUsersAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<TenantUser>>(Users);
+
+    public Task<int> GetUserCountAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(Users.Count);
+
+    public Task<UserSaveResult> CreateUserAsync(UserCreateEntry entry, CancellationToken cancellationToken = default) =>
+        Task.FromResult(new UserSaveResult(true, 99, "DEMO_TOKEN", null));
+
+    public Task<bool> SetActiveAsync(int userId, bool active, CancellationToken cancellationToken = default) =>
+        Task.FromResult(true);
+
+    public Task<bool> DeleteUserAsync(int userId, CancellationToken cancellationToken = default) =>
+        Task.FromResult(true);
+
+    public Task<string?> GenerateResetTokenAsync(int userId, CancellationToken cancellationToken = default) =>
+        Task.FromResult<string?>("DEMO_TOKEN");
+
+    public Task<PasswordResetTokenInfo?> ValidateResetTokenAsync(string token, CancellationToken cancellationToken = default) =>
+        Task.FromResult<PasswordResetTokenInfo?>(null);
+
+    public Task<bool> ConsumeResetTokenAsync(string token, string newPassword, CancellationToken cancellationToken = default) =>
+        Task.FromResult(true);
+
+    public Task<bool> ChangePasswordAsync(int userId, string newPassword, CancellationToken cancellationToken = default) =>
+        Task.FromResult(true);
+}
+
 internal static class DemoData
 {
     public static readonly AuthenticatedUser User = new(1, "demo", "Pastor Demo", ["Administrador", "Finanzas"]);

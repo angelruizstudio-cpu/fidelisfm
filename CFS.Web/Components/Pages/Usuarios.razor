@@ -1,0 +1,322 @@
+@page "/usuarios"
+@attribute [Authorize(Roles = "Administrador")]
+@using Microsoft.AspNetCore.Authorization
+@using System.Security.Claims
+@inject IUserManagementRepository UserManagement
+@inject IEmailService EmailService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager Nav
+@inject IConfiguration Configuration
+
+<PageTitle>Usuarios — Fidelis</PageTitle>
+
+<div class="page-header">
+    <h1 class="page-title">Usuarios</h1>
+    <button class="btn btn-primary" @onclick="() => showCreateForm = !showCreateForm">
+        @(showCreateForm ? "Cancelar" : "+ Nuevo usuario")
+    </button>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(successMessage))
+{
+    <div class="alert alert-success">@successMessage</div>
+}
+@if (!string.IsNullOrWhiteSpace(errorMessage))
+{
+    <div class="alert alert-danger">@errorMessage</div>
+}
+
+@if (showCreateForm)
+{
+    <div class="user-create-panel">
+        <h2 class="user-create-title">Nuevo usuario</h2>
+        <EditForm Model="@newUser" OnValidSubmit="CreateUserAsync" FormName="create-user">
+            <DataAnnotationsValidator />
+            <div class="user-create-grid">
+                <div>
+                    <label class="form-label">Nombre</label>
+                    <InputText @bind-Value="newUser.FirstName" class="form-control" placeholder="Nombre" />
+                </div>
+                <div>
+                    <label class="form-label">Apellido</label>
+                    <InputText @bind-Value="newUser.LastName" class="form-control" placeholder="Apellido" />
+                </div>
+                <div>
+                    <label class="form-label">Usuario</label>
+                    <InputText @bind-Value="newUser.UserName" class="form-control" placeholder="nombreusuario" autocomplete="off" />
+                </div>
+                <div>
+                    <label class="form-label">Correo electrónico</label>
+                    <InputText @bind-Value="newUser.Email" class="form-control" placeholder="correo@iglesia.com" />
+                </div>
+                <div>
+                    <label class="form-label">Rol</label>
+                    <InputSelect @bind-Value="newUser.Role" class="form-select">
+                        <option value="Administrador">Administrador</option>
+                        <option value="Tesorero">Tesorero</option>
+                        <option value="Auditor">Auditor</option>
+                    </InputSelect>
+                </div>
+            </div>
+            <div class="user-create-actions">
+                <button class="btn btn-primary" type="submit" disabled="@creating">
+                    @(creating ? "Creando..." : "Crear usuario")
+                </button>
+                <button class="btn btn-secondary" type="button" @onclick="() => showCreateForm = false">
+                    Cancelar
+                </button>
+            </div>
+        </EditForm>
+    </div>
+}
+
+@if (users is null)
+{
+    <p class="loading-text">Cargando usuarios...</p>
+}
+else if (users.Count == 0)
+{
+    <p class="empty-state">No hay usuarios registrados.</p>
+}
+else
+{
+    <div class="user-table-wrapper">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Nombre</th>
+                    <th>Usuario</th>
+                    <th>Correo</th>
+                    <th>Roles</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var u in users)
+                {
+                    <tr class="@(!u.IsActive ? "user-row-inactive" : string.Empty)">
+                        <td>
+                            @u.FullName
+                            @if (u.MustChangePassword)
+                            {
+                                <span class="badge badge-warning">pendiente</span>
+                            }
+                        </td>
+                        <td>@u.UserName</td>
+                        <td>@(u.Email ?? "—")</td>
+                        <td>@string.Join(", ", u.Roles)</td>
+                        <td>
+                            <span class="@(u.IsActive ? "badge badge-success" : "badge badge-secondary")">
+                                @(u.IsActive ? "Activo" : "Inactivo")
+                            </span>
+                        </td>
+                        <td>
+                            <div class="user-actions">
+                                @if (u.Id != currentUserId)
+                                {
+                                    <button class="btn-sm btn-outline" @onclick="() => ToggleActiveAsync(u)" title="@(u.IsActive ? "Desactivar" : "Activar")">
+                                        @(u.IsActive ? "Desactivar" : "Activar")
+                                    </button>
+                                    <button class="btn-sm btn-outline" @onclick="() => SendResetAsync(u)" title="Enviar enlace de contraseña">
+                                        Enviar enlace
+                                    </button>
+                                    <button class="btn-sm btn-danger-outline" @onclick="() => ConfirmDelete(u)" title="Eliminar usuario">
+                                        Eliminar
+                                    </button>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">(tú)</span>
+                                }
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@if (deleteTarget is not null)
+{
+    <div class="modal-overlay">
+        <div class="modal-dialog">
+            <h3 class="modal-title">¿Eliminar usuario?</h3>
+            <p>¿Seguro que deseas eliminar a <strong>@deleteTarget.FullName</strong> (@deleteTarget.UserName)? Esta acción no se puede deshacer.</p>
+            <div class="modal-actions">
+                <button class="btn btn-danger" @onclick="DeleteUserAsync" disabled="@deleting">
+                    @(deleting ? "Eliminando..." : "Eliminar")
+                </button>
+                <button class="btn btn-secondary" @onclick="() => deleteTarget = null">Cancelar</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private IReadOnlyList<TenantUser>? users;
+    private bool showCreateForm;
+    private bool creating;
+    private bool deleting;
+    private string? successMessage;
+    private string? errorMessage;
+    private int currentUserId;
+    private TenantUser? deleteTarget;
+
+    private readonly UserCreateEntry newUser = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        currentUserId = int.TryParse(
+            authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var id) ? id : 0;
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            users = await UserManagement.GetUsersAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No se pudo cargar la lista de usuarios: {ex.Message}";
+            users = [];
+        }
+    }
+
+    private async Task CreateUserAsync()
+    {
+        if (string.IsNullOrWhiteSpace(newUser.UserName))
+        {
+            errorMessage = "El nombre de usuario es requerido.";
+            return;
+        }
+
+        creating = true;
+        successMessage = null;
+        errorMessage = null;
+
+        try
+        {
+            var result = await UserManagement.CreateUserAsync(newUser);
+
+            if (!result.Saved)
+            {
+                errorMessage = result.ErrorMessage ?? "No se pudo crear el usuario.";
+                creating = false;
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(newUser.Email) && !string.IsNullOrWhiteSpace(result.ResetToken))
+            {
+                var baseUrl = Configuration["App:BaseUrl"]?.TrimEnd('/') ?? Nav.BaseUri.TrimEnd('/');
+                var link = $"{baseUrl}/cambiar-contrasena?token={Uri.EscapeDataString(result.ResetToken)}";
+
+                var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+                var orgName = authState.User.FindFirst("TenantName")?.Value ?? "tu iglesia";
+
+                await EmailService.SendWelcomeAsync(
+                    newUser.Email,
+                    $"{newUser.FirstName} {newUser.LastName}".Trim(),
+                    orgName,
+                    link);
+
+                successMessage = $"Usuario '{newUser.UserName}' creado. Se envió un enlace de bienvenida a {newUser.Email}.";
+            }
+            else
+            {
+                successMessage = $"Usuario '{newUser.UserName}' creado. Sin correo configurado, no se envió enlace de bienvenida.";
+            }
+
+            newUser.FirstName = string.Empty;
+            newUser.LastName = string.Empty;
+            newUser.UserName = string.Empty;
+            newUser.Email = string.Empty;
+            newUser.Role = "Tesorero";
+            showCreateForm = false;
+
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error al crear el usuario: {ex.Message}";
+        }
+        finally
+        {
+            creating = false;
+        }
+    }
+
+    private async Task ToggleActiveAsync(TenantUser u)
+    {
+        successMessage = null;
+        errorMessage = null;
+        var ok = await UserManagement.SetActiveAsync(u.Id, !u.IsActive);
+        if (ok)
+        {
+            successMessage = $"Usuario '{u.UserName}' {(!u.IsActive ? "activado" : "desactivado")}.";
+            await LoadAsync();
+        }
+        else
+        {
+            errorMessage = "No se pudo actualizar el estado del usuario.";
+        }
+    }
+
+    private async Task SendResetAsync(TenantUser u)
+    {
+        successMessage = null;
+        errorMessage = null;
+
+        if (string.IsNullOrWhiteSpace(u.Email))
+        {
+            errorMessage = $"El usuario '{u.UserName}' no tiene correo electrónico registrado.";
+            return;
+        }
+
+        var token = await UserManagement.GenerateResetTokenAsync(u.Id);
+        if (token is null)
+        {
+            errorMessage = "No se pudo generar el enlace.";
+            return;
+        }
+
+        var baseUrl = Configuration["App:BaseUrl"]?.TrimEnd('/') ?? Nav.BaseUri.TrimEnd('/');
+        var link = $"{baseUrl}/cambiar-contrasena?token={Uri.EscapeDataString(token)}";
+
+        await EmailService.SendPasswordResetAsync(u.Email, u.FullName, link);
+        successMessage = $"Enlace de restablecimiento enviado a {u.Email}.";
+    }
+
+    private void ConfirmDelete(TenantUser u)
+    {
+        deleteTarget = u;
+        successMessage = null;
+        errorMessage = null;
+    }
+
+    private async Task DeleteUserAsync()
+    {
+        if (deleteTarget is null) return;
+
+        deleting = true;
+        var ok = await UserManagement.DeleteUserAsync(deleteTarget.Id);
+        deleting = false;
+
+        if (ok)
+        {
+            successMessage = $"Usuario '{deleteTarget.UserName}' eliminado.";
+            deleteTarget = null;
+            await LoadAsync();
+        }
+        else
+        {
+            errorMessage = "No se pudo eliminar el usuario.";
+            deleteTarget = null;
+        }
+    }
+}

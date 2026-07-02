@@ -1,0 +1,155 @@
+@page "/cambiar-contrasena"
+@layout LoginLayout
+@attribute [AllowAnonymous]
+@using Microsoft.AspNetCore.Authorization
+@using System.Security.Claims
+@inject IUserManagementRepository UserManagement
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager Nav
+
+<PageTitle>Cambiar contraseña — Fidelis</PageTitle>
+
+<main class="login-shell">
+    <section class="login-panel">
+        <div class="login-heading">
+            <img class="login-logo" src="images/fidelis-logo.png" alt="Fidelis Financial Management" />
+            <h1>@(IsFirstLogin ? "Establece tu contraseña" : "Cambiar contraseña")</h1>
+            @if (IsFirstLogin)
+            {
+                <p>Por seguridad, debes establecer una contraseña personal antes de continuar.</p>
+            }
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(errorMessage))
+        {
+            <div class="alert alert-danger">@errorMessage</div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(Token))
+        {
+            @* Token-based flow (email link) *@
+            @if (tokenValid == false)
+            {
+                <div class="alert alert-danger">Este enlace ha expirado o ya fue utilizado. Solicita uno nuevo al administrador.</div>
+            }
+            else
+            {
+                <form method="post" action="/api/password/reset">
+                    <AntiforgeryToken />
+                    <input type="hidden" name="token" value="@Token" />
+                    <div class="mb-3">
+                        <label class="form-label">Nueva contraseña</label>
+                        <input name="newPassword" type="password" class="form-control" required minlength="8" autocomplete="new-password" />
+                    </div>
+                    <div class="mb-4">
+                        <label class="form-label">Confirmar contraseña</label>
+                        <input name="confirmPassword" type="password" class="form-control" required minlength="8" autocomplete="new-password" />
+                    </div>
+                    <button class="btn btn-primary w-100" type="submit">Guardar contraseña</button>
+                </form>
+            }
+        }
+        else
+        {
+            @* Authenticated first-login flow *@
+            <EditForm Model="@model" OnValidSubmit="SaveAsync" FormName="cambiar-contrasena">
+                <DataAnnotationsValidator />
+                <div class="mb-3">
+                    <label class="form-label">Nueva contraseña</label>
+                    <InputText @bind-Value="model.NewPassword" type="password" class="form-control" autocomplete="new-password" />
+                    <ValidationMessage For="() => model.NewPassword" />
+                </div>
+                <div class="mb-4">
+                    <label class="form-label">Confirmar contraseña</label>
+                    <InputText @bind-Value="model.Confirm" type="password" class="form-control" autocomplete="new-password" />
+                    <ValidationMessage For="() => model.Confirm" />
+                </div>
+                <button class="btn btn-primary w-100" type="submit" disabled="@saving">
+                    @(saving ? "Guardando..." : "Guardar contraseña")
+                </button>
+            </EditForm>
+        }
+    </section>
+</main>
+
+@code {
+    [SupplyParameterFromQuery(Name = "token")]
+    public string? Token { get; set; }
+
+    [SupplyParameterFromQuery(Name = "first")]
+    public string? First { get; set; }
+
+    [SupplyParameterFromQuery(Name = "error")]
+    public string? ErrorParam { get; set; }
+
+    private bool IsFirstLogin => First == "true";
+    private bool? tokenValid;
+    private string? errorMessage;
+    private bool saving;
+    private int authenticatedUserId;
+
+    private readonly ChangePasswordModel model = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        errorMessage = ErrorParam switch
+        {
+            "invalid" => "Las contraseñas no coinciden o están vacías.",
+            "expired" => "El enlace ha expirado o ya fue utilizado.",
+            _ => null
+        };
+
+        if (!string.IsNullOrWhiteSpace(Token))
+        {
+            var info = await UserManagement.ValidateResetTokenAsync(Token);
+            tokenValid = info?.IsValid ?? false;
+            return;
+        }
+
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        if (!authState.User.Identity?.IsAuthenticated ?? true)
+        {
+            Nav.NavigateTo("/login", forceLoad: true);
+            return;
+        }
+
+        authenticatedUserId = int.TryParse(
+            authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var id) ? id : 0;
+    }
+
+    private async Task SaveAsync()
+    {
+        errorMessage = null;
+
+        if (model.NewPassword != model.Confirm)
+        {
+            errorMessage = "Las contraseñas no coinciden.";
+            return;
+        }
+
+        if (model.NewPassword.Length < 8)
+        {
+            errorMessage = "La contraseña debe tener al menos 8 caracteres.";
+            return;
+        }
+
+        saving = true;
+        var ok = await UserManagement.ChangePasswordAsync(authenticatedUserId, model.NewPassword);
+        saving = false;
+
+        if (ok)
+        {
+            Nav.NavigateTo("/login?msg=passwordset", forceLoad: true);
+        }
+        else
+        {
+            errorMessage = "No se pudo guardar la contraseña. Intenta de nuevo.";
+        }
+    }
+
+    private sealed class ChangePasswordModel
+    {
+        public string NewPassword { get; set; } = string.Empty;
+        public string Confirm { get; set; } = string.Empty;
+    }
+}

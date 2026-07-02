@@ -26,6 +26,9 @@ public sealed class SqlUserAuthenticationRepository(SqlConnectionFactory connect
         var hasCurrentColumns = await HasColumnsAsync(connection, "ContrasenaSalt", "ContrasenaHash", cancellationToken);
         var hasLegacyColumns = await HasColumnsAsync(connection, "Salt", "Hash", cancellationToken);
         var hasTenantColumn = await HasColumnAsync(connection, "ID_Tenant_FK", cancellationToken);
+        var hasMustChange = await HasColumnAsync(connection, "MustChangePassword", cancellationToken);
+        var hasEmail = await HasColumnAsync(connection, "Email", cancellationToken);
+        var hasIsActive = await HasColumnAsync(connection, "IsActive", cancellationToken);
 
         if (!hasCurrentColumns && !hasLegacyColumns)
         {
@@ -37,7 +40,10 @@ public sealed class SqlUserAuthenticationRepository(SqlConnectionFactory connect
             {(hasCurrentColumns ? "ContrasenaHash" : "CAST(NULL AS VARBINARY(MAX)) AS ContrasenaHash")},
             {(hasLegacyColumns ? "Salt" : "CAST(NULL AS VARBINARY(MAX)) AS Salt")},
             {(hasLegacyColumns ? "Hash" : "CAST(NULL AS VARBINARY(MAX)) AS Hash")},
-            {(hasTenantColumn ? "ID_Tenant_FK" : "CAST(1 AS INT) AS ID_Tenant_FK")}
+            {(hasTenantColumn ? "ID_Tenant_FK" : "CAST(1 AS INT) AS ID_Tenant_FK")},
+            {(hasMustChange ? "MustChangePassword" : "CAST(0 AS BIT) AS MustChangePassword")},
+            {(hasEmail ? "Email" : "CAST(NULL AS NVARCHAR(256)) AS Email")},
+            {(hasIsActive ? "IsActive" : "CAST(1 AS BIT) AS IsActive")}
             """;
 
         await using var command = connection.CreateCommand();
@@ -58,6 +64,9 @@ public sealed class SqlUserAuthenticationRepository(SqlConnectionFactory connect
         byte[]? salt;
         byte[]? expectedHash;
         int tenantId;
+        bool mustChangePassword;
+        string? email;
+        bool isActive;
 
         await using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleRow, cancellationToken))
         {
@@ -81,16 +90,19 @@ public sealed class SqlUserAuthenticationRepository(SqlConnectionFactory connect
             salt = HasValue(currentSalt) && HasValue(currentHash) ? currentSalt : legacySalt;
             expectedHash = HasValue(currentSalt) && HasValue(currentHash) ? currentHash : legacyHash;
             tenantId = reader.GetInt32(reader.GetOrdinal("ID_Tenant_FK"));
+            mustChangePassword = reader.GetBoolean(reader.GetOrdinal("MustChangePassword"));
+            email = reader["Email"] as string;
+            isActive = reader.GetBoolean(reader.GetOrdinal("IsActive"));
         }
 
-        if (!VerifyPassword(password, salt, expectedHash))
+        if (!isActive || !VerifyPassword(password, salt, expectedHash))
         {
             return null;
         }
 
         var roles = await LoadRolesAsync(connection, userId, cancellationToken);
         var (tenantName, planKey) = await LoadTenantInfoAsync(connection, tenantId, cancellationToken);
-        return new AuthenticatedUser(userId, storedUserName, fullName, roles, tenantId, tenantName, planKey);
+        return new AuthenticatedUser(userId, storedUserName, fullName, roles, tenantId, tenantName, planKey, mustChangePassword, email);
     }
 
     private static async Task<bool> HasColumnsAsync(

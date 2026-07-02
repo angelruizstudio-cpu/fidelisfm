@@ -32,28 +32,28 @@
     </a>
 
     <div class="nav-section">
-        @if (HasFeature(CfsFeatures.Dashboard))
+        @if (HasFeature(CfsFeatures.Dashboard) && CanSee("dashboard"))
         {
             <NavLink class="nav-link" href="dashboard">
                 <span class="nav-icon" aria-hidden="true">⌂</span>
                 Dashboard
             </NavLink>
         }
-        @if (HasFeature(CfsFeatures.Income))
+        @if (HasFeature(CfsFeatures.Income) && CanSee("ingresos"))
         {
             <NavLink class="nav-link" href="ingresos">
                 <span class="nav-icon" aria-hidden="true">$</span>
                 Ingresos
             </NavLink>
         }
-        @if (HasFeature(CfsFeatures.Expenses))
+        @if (HasFeature(CfsFeatures.Expenses) && CanSee("egresos"))
         {
             <NavLink class="nav-link" href="egresos">
                 <span class="nav-icon" aria-hidden="true">−</span>
                 Egresos
             </NavLink>
         }
-        @if (HasFeature(CfsFeatures.Checks))
+        @if (HasFeature(CfsFeatures.Checks) && CanSee("cheques"))
         {
             <NavLink class="nav-link" href="cheques">
                 <span class="nav-icon" aria-hidden="true">▤</span>
@@ -64,53 +64,60 @@
                 Formato de cheques
             </NavLink>
         }
-        @if (HasFeature(CfsFeatures.Deposits))
+        @if (HasFeature(CfsFeatures.Deposits) && CanSee("depositos"))
         {
             <NavLink class="nav-link" href="depositos">
                 <span class="nav-icon" aria-hidden="true">⇣</span>
                 Depósitos
             </NavLink>
         }
-        @if (HasFeature(CfsFeatures.Reconciliation))
+        @if (HasFeature(CfsFeatures.Reconciliation) && CanSee("conciliacion"))
         {
             <NavLink class="nav-link" href="conciliacion">
                 <span class="nav-icon" aria-hidden="true">✓</span>
                 Conciliación
             </NavLink>
         }
-        @if (HasFeature(CfsFeatures.ReportsBasic))
+        @if (HasFeature(CfsFeatures.ReportsBasic) && CanSee("reportes"))
         {
             <NavLink class="nav-link" href="reportes">
                 <span class="nav-icon" aria-hidden="true">▥</span>
                 Reportes
             </NavLink>
         }
-        @if (HasFeature(CfsFeatures.Audit))
+        @if (HasFeature(CfsFeatures.Audit) && CanSee("auditoria"))
         {
             <NavLink class="nav-link" href="auditoria">
                 <span class="nav-icon" aria-hidden="true">⏱</span>
                 Auditoría
             </NavLink>
         }
-        @if (HasFeature(CfsFeatures.TrendAnalysis))
+        @if (HasFeature(CfsFeatures.TrendAnalysis) && CanSee("tendencias"))
         {
             <NavLink class="nav-link" href="tendencias">
                 <span class="nav-icon" aria-hidden="true">📈</span>
                 Tendencias
             </NavLink>
         }
-        @if (HasFeature(CfsFeatures.Automation))
+        @if (HasFeature(CfsFeatures.Automation) && CanSee("automatizaciones"))
         {
             <NavLink class="nav-link" href="automatizaciones">
                 <span class="nav-icon" aria-hidden="true">⟲</span>
                 Automatizaciones
             </NavLink>
         }
-        @if (subscription is not null && !subscription.IsFounderAccount)
+        @if (subscription is not null && !subscription.IsFounderAccount && CanSee("plan"))
         {
             <NavLink class="nav-link" href="configuracion/plan">
                 <span class="nav-icon" aria-hidden="true">★</span>
                 Plan y Add-ons
+            </NavLink>
+        }
+        @if (isAdmin)
+        {
+            <NavLink class="nav-link" href="usuarios">
+                <span class="nav-icon" aria-hidden="true">👥</span>
+                Usuarios
             </NavLink>
         }
         @if (isFounderAdmin)
@@ -134,6 +141,9 @@
 @code {
     private TenantSubscription? subscription;
     private bool isFounderAdmin;
+    private bool isAdmin;
+    private bool isTesorero;
+    private bool isAuditor;
     private IReadOnlyList<TenantAccessOption> accessibleTenants = [];
     private int activeTenantId;
     private string CurrentTenantName =>
@@ -144,6 +154,9 @@
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         subscription = await SubscriptionService.GetCurrentAsync(authState.User);
         isFounderAdmin = authState.User.FindFirst("TenantId")?.Value == "1" && authState.User.IsInRole("Administrador");
+        isAdmin = authState.User.IsInRole("Administrador");
+        isTesorero = authState.User.IsInRole("Tesorero");
+        isAuditor = authState.User.IsInRole("Auditor");
 
         activeTenantId = int.TryParse(authState.User.FindFirst("TenantId")?.Value, out var tenantId) ? tenantId : 1;
         var userId = int.TryParse(authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var id) ? id : 0;
@@ -161,4 +174,29 @@
 
     private bool HasFeature(string featureKey) =>
         subscription?.HasFeature(featureKey) ?? true;
+
+    // Returns true if the current user's role allows seeing this section.
+    // Users with no role assigned (legacy "Finanzas" role) see all non-admin sections.
+    private bool CanSee(string section)
+    {
+        if (isAdmin) return true;
+        var legacy = IsLegacyRole();
+        return section switch
+        {
+            // Auditor: only these sections visible
+            "ingresos" or "egresos" => isTesorero || isAuditor || legacy,
+            "auditoria" => isAuditor,
+
+            // Tesorero + legacy — NOT auditor, NOT admin-only
+            "dashboard" or "cheques" or "depositos" or "conciliacion" or "reportes" or "plan" =>
+                isTesorero || legacy,
+
+            // Administrador only
+            "tendencias" or "automatizaciones" => false,
+
+            _ => isTesorero || legacy
+        };
+    }
+
+    private bool IsLegacyRole() => !isAdmin && !isTesorero && !isAuditor;
 }
