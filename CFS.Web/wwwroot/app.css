@@ -3550,3 +3550,33 @@ h1:focus {
 .trend-series-toggle.series-net {
     color: #1c7ed6;
 }
+
+.date-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: 0.25rem;
+}
+
+.date-preset {
+    padding: 0.2rem 0.65rem;
+    font-size: 0.78rem;
+    border: 1px solid #d1d5db;
+    border-radius: 999px;
+    background: #fff;
+    color: #374151;
+    cursor: pointer;
+    transition: background 0.1s, border-color 0.1s, color 0.1s;
+}
+
+.date-preset:hover {
+    background: #f3f4f6;
+    border-color: #9ca3af;
+}
+
+.date-preset.selected {
+    background: #182232;
+    border-color: #182232;
+    color: #fff;
+    font-weight: 600;
+}
