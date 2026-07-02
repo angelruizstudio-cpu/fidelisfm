@@ -1,31 +1,27 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\aruiz\\Documents\\Codex\\2026-05-08\\files-mentioned-by-the-user-finanzasiglesia\\CFS.Data\\CFS.Data.csproj": {}
+    "/home/user/fidelisfm/CFS.Data/CFS.Data.csproj": {}
   },
   "projects": {
-    "C:\\Users\\aruiz\\Documents\\Codex\\2026-05-08\\files-mentioned-by-the-user-finanzasiglesia\\CFS.Core\\CFS.Core.csproj": {
+    "/home/user/fidelisfm/CFS.Core/CFS.Core.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\aruiz\\Documents\\Codex\\2026-05-08\\files-mentioned-by-the-user-finanzasiglesia\\CFS.Core\\CFS.Core.csproj",
+        "projectUniqueName": "/home/user/fidelisfm/CFS.Core/CFS.Core.csproj",
         "projectName": "CFS.Core",
-        "projectPath": "C:\\Users\\aruiz\\Documents\\Codex\\2026-05-08\\files-mentioned-by-the-user-finanzasiglesia\\CFS.Core\\CFS.Core.csproj",
-        "packagesPath": "C:\\Users\\aruiz\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\aruiz\\Documents\\Codex\\2026-05-08\\files-mentioned-by-the-user-finanzasiglesia\\CFS.Core\\obj\\",
+        "projectPath": "/home/user/fidelisfm/CFS.Core/CFS.Core.csproj",
+        "packagesPath": "/root/.nuget/packages/",
+        "outputPath": "/home/user/fidelisfm/CFS.Core/obj/",
         "projectStyle": "PackageReference",
-        "fallbackFolders": [
-          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
-        ],
         "configFilePaths": [
-          "C:\\Users\\aruiz\\Documents\\Codex\\2026-05-08\\files-mentioned-by-the-user-finanzasiglesia\\NuGet.Config",
-          "C:\\Users\\aruiz\\AppData\\Roaming\\NuGet\\NuGet.Config",
-          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
-          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+          "/home/user/fidelisfm/NuGet.Config",
+          "/root/.nuget/NuGet/NuGet.Config"
         ],
         "originalTargetFrameworks": [
           "net10.0"
         ],
         "sources": {
+          "/usr/lib/dotnet/library-packs": {},
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
@@ -44,7 +40,7 @@
           "auditLevel": "low",
           "auditMode": "all"
         },
-        "SdkAnalysisLevel": "10.0.200"
+        "SdkAnalysisLevel": "10.0.100"
       },
       "frameworks": {
         "net10.0": {
@@ -65,7 +61,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.203/PortableRuntimeIdentifierGraph.json",
+          "runtimeIdentifierGraphPath": "/usr/lib/dotnet/sdk/10.0.109/PortableRuntimeIdentifierGraph.json",
           "packagesToPrune": {
             "Microsoft.CSharp": "(,4.7.32767]",
             "Microsoft.VisualBasic": "(,10.4.32767]",
@@ -343,36 +339,32 @@
         }
       }
     },
-    "C:\\Users\\aruiz\\Documents\\Codex\\2026-05-08\\files-mentioned-by-the-user-finanzasiglesia\\CFS.Data\\CFS.Data.csproj": {
+    "/home/user/fidelisfm/CFS.Data/CFS.Data.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\aruiz\\Documents\\Codex\\2026-05-08\\files-mentioned-by-the-user-finanzasiglesia\\CFS.Data\\CFS.Data.csproj",
+        "projectUniqueName": "/home/user/fidelisfm/CFS.Data/CFS.Data.csproj",
         "projectName": "CFS.Data",
-        "projectPath": "C:\\Users\\aruiz\\Documents\\Codex\\2026-05-08\\files-mentioned-by-the-user-finanzasiglesia\\CFS.Data\\CFS.Data.csproj",
-        "packagesPath": "C:\\Users\\aruiz\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\aruiz\\Documents\\Codex\\2026-05-08\\files-mentioned-by-the-user-finanzasiglesia\\CFS.Data\\obj\\",
+        "projectPath": "/home/user/fidelisfm/CFS.Data/CFS.Data.csproj",
+        "packagesPath": "/root/.nuget/packages/",
+        "outputPath": "/home/user/fidelisfm/CFS.Data/obj/",
         "projectStyle": "PackageReference",
-        "fallbackFolders": [
-          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
-        ],
         "configFilePaths": [
-          "C:\\Users\\aruiz\\Documents\\Codex\\2026-05-08\\files-mentioned-by-the-user-finanzasiglesia\\NuGet.Config",
-          "C:\\Users\\aruiz\\AppData\\Roaming\\NuGet\\NuGet.Config",
-          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
-          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+          "/home/user/fidelisfm/NuGet.Config",
+          "/root/.nuget/NuGet/NuGet.Config"
         ],
         "originalTargetFrameworks": [
           "net10.0"
         ],
         "sources": {
+          "/usr/lib/dotnet/library-packs": {},
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
           "net10.0": {
             "targetAlias": "net10.0",
             "projectReferences": {
-              "C:\\Users\\aruiz\\Documents\\Codex\\2026-05-08\\files-mentioned-by-the-user-finanzasiglesia\\CFS.Core\\CFS.Core.csproj": {
-                "projectPath": "C:\\Users\\aruiz\\Documents\\Codex\\2026-05-08\\files-mentioned-by-the-user-finanzasiglesia\\CFS.Core\\CFS.Core.csproj"
+              "/home/user/fidelisfm/CFS.Core/CFS.Core.csproj": {
+                "projectPath": "/home/user/fidelisfm/CFS.Core/CFS.Core.csproj"
               }
             }
           }
@@ -387,7 +379,7 @@
           "auditLevel": "low",
           "auditMode": "all"
         },
-        "SdkAnalysisLevel": "10.0.200"
+        "SdkAnalysisLevel": "10.0.100"
       },
       "frameworks": {
         "net10.0": {
@@ -396,6 +388,14 @@
             "Microsoft.Data.SqlClient": {
               "target": "Package",
               "version": "[6.1.3, )"
+            },
+            "Microsoft.Extensions.Configuration.Abstractions": {
+              "target": "Package",
+              "version": "[10.0.0, )"
+            },
+            "Microsoft.Extensions.Logging.Abstractions": {
+              "target": "Package",
+              "version": "[10.0.0, )"
             }
           },
           "imports": [
@@ -414,7 +414,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.203/PortableRuntimeIdentifierGraph.json",
+          "runtimeIdentifierGraphPath": "/usr/lib/dotnet/sdk/10.0.109/PortableRuntimeIdentifierGraph.json",
           "packagesToPrune": {
             "Microsoft.CSharp": "(,4.7.32767]",
             "Microsoft.VisualBasic": "(,10.4.32767]",
