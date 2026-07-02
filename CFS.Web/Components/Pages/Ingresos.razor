@@ -42,8 +42,15 @@ else
             <div class="income-filter">
                 <input class="form-control" placeholder="Buscar miembro, categoría, método..." @bind="searchText" @bind:event="oninput" />
                 <div class="date-filter">
-                    <InputDate class="form-control" @bind-Value="filterStart" />
-                    <InputDate class="form-control" @bind-Value="filterEnd" />
+                    <InputDate class="form-control" @bind-Value="filterStart" @bind-Value:after="LoadAsync" />
+                    <InputDate class="form-control" @bind-Value="filterEnd" @bind-Value:after="LoadAsync" />
+                </div>
+                <div class="date-presets">
+                    <button type="button" class="@PresetClass(0)" @onclick="() => SetPreset(0)">Hoy</button>
+                    <button type="button" class="@PresetClass(30)" @onclick="() => SetPreset(30)">30 días</button>
+                    <button type="button" class="@PresetClass(90)" @onclick="() => SetPreset(90)">90 días</button>
+                    <button type="button" class="@PresetClass(365)" @onclick="() => SetPreset(365)">Este año</button>
+                    <button type="button" class="@PresetClass(-1)" @onclick="() => SetPreset(-1)">Todo</button>
                 </div>
                 <div class="segmented-filter" role="group" aria-label="Filtrar ingresos">
                     <button class="@StatusButtonClass("active")" type="button" @onclick='() => statusFilter = "active"'>Activos</button>
@@ -364,6 +371,7 @@ else
     private IncomeTransaction? selectedTransaction;
     private DateTime filterStart = DateTime.Today.AddDays(-30);
     private DateTime filterEnd = DateTime.Today;
+    private int activePreset = 30;
     private string searchText = string.Empty;
     private string memberSearch = string.Empty;
     private string selectedMemberName = string.Empty;
@@ -839,6 +847,22 @@ else
 
     private string StatusButtonClass(string value) =>
         statusFilter == value ? "selected" : string.Empty;
+
+    private string PresetClass(int days) =>
+        activePreset == days ? "date-preset selected" : "date-preset";
+
+    private async Task SetPreset(int days)
+    {
+        activePreset = days;
+        filterEnd = DateTime.Today;
+        filterStart = days switch
+        {
+            0 => DateTime.Today,
+            -1 => new DateTime(2000, 1, 1),
+            _ => DateTime.Today.AddDays(-days)
+        };
+        await LoadAsync();
+    }
 
     private string? GetRouteHint()
     {
