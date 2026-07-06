@@ -207,7 +207,6 @@ C:/Users/aruiz/Documents/Codex/2026-05-08/files-mentioned-by-the-user-finanzasig
 /home/user/fidelisfm/CFS.Web/obj/Debug/net10.0/scopedcss/Components/Layout/ReconnectModal.razor.rz.scp.css
 /home/user/fidelisfm/CFS.Web/obj/Debug/net10.0/scopedcss/bundle/CFS.Web.styles.css
 /home/user/fidelisfm/CFS.Web/obj/Debug/net10.0/scopedcss/projectbundle/CFS.Web.bundle.scp.css
-/home/user/fidelisfm/CFS.Web/obj/Debug/net10.0/compressed/k9t0nfzeud-{0}-kggwreapea-kggwreapea.gz
 /home/user/fidelisfm/CFS.Web/obj/Debug/net10.0/compressed/7o3y1pjvva-{0}-bqjiyaj88i-bqjiyaj88i.gz
 /home/user/fidelisfm/CFS.Web/obj/Debug/net10.0/compressed/w35xqzwvyj-{0}-c2jlpeoesf-c2jlpeoesf.gz
 /home/user/fidelisfm/CFS.Web/obj/Debug/net10.0/compressed/yhzsx6b2nw-{0}-erw9l3u2r3-erw9l3u2r3.gz
@@ -265,3 +264,4 @@ C:/Users/aruiz/Documents/Codex/2026-05-08/files-mentioned-by-the-user-finanzasig
 /home/user/fidelisfm/CFS.Web/obj/Debug/net10.0/CFS.Web.csproj.Up2Date
 /home/user/fidelisfm/CFS.Web/obj/Debug/net10.0/CFS.Web.genruntimeconfig.cache
 /home/user/fidelisfm/CFS.Web/obj/Debug/net10.0/ref/CFS.Web.dll
+/home/user/fidelisfm/CFS.Web/obj/Debug/net10.0/compressed/k9t0nfzeud-{0}-4y5s6eq709-4y5s6eq709.gz
