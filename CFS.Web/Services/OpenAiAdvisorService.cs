@@ -43,19 +43,20 @@ public sealed class OpenAiAdvisorService(
         if (string.IsNullOrWhiteSpace(apiKey))
         {
             return new AiAnswer(
-                "El agente IA ya está conectado en código, pero falta configurar la llave de OpenAI. Configura `OpenAI:ApiKey` en User Secrets o la variable de ambiente `OPENAI_API_KEY` y vuelve a preguntar.",
-                [new AiCitation("Configuración", "OpenAI:ApiKey / OPENAI_API_KEY", null)],
+                "El agente IA no tiene una llave configurada. Configura la variable de ambiente `GROQ_API_KEY` en Azure App Service y reinicia la aplicación.",
+                [new AiCitation("Configuración", "GROQ_API_KEY", null)],
                 ["¿Cuál es el balance en libros por cuenta?", "Resume el Profit and Loss de este año"]);
         }
 
         var start = request.StartDate ?? new DateTime(DateTime.Today.Year, 1, 1);
         var end = request.EndDate ?? DateTime.Today;
         var context = await BuildFinancialContextAsync(start, end, cancellationToken);
+        var model = configuration["Groq:Model"] ?? "llama-3.3-70b-versatile";
 
         var payload = new
         {
-            model = configuration["OpenAI:Model"] ?? "gpt-4.1-mini",
-            input = new object[]
+            model,
+            messages = new object[]
             {
                 new
                 {
@@ -84,10 +85,12 @@ public sealed class OpenAiAdvisorService(
                     """
                 }
             },
-            max_output_tokens = 900
+            max_tokens = 900,
+            temperature = 0.3
         };
 
-        using var message = new HttpRequestMessage(HttpMethod.Post, GetResponsesUrl());
+        var url = GetChatUrl();
+        using var message = new HttpRequestMessage(HttpMethod.Post, url);
         message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
         message.Content = new StringContent(JsonSerializer.Serialize(payload, JsonOptions), Encoding.UTF8, "application/json");
 
@@ -97,15 +100,15 @@ public sealed class OpenAiAdvisorService(
         if (!response.IsSuccessStatusCode)
         {
             return new AiAnswer(
-                $"OpenAI respondió con error {(int)response.StatusCode}. Verifica la llave, el modelo configurado y que el servidor tenga salida a internet. Detalle: {SummarizeError(responseBody)}",
-                [new AiCitation("OpenAI", "Responses API", response.StatusCode.ToString())],
-                ["¿Cómo verifico la configuración de OpenAI?", "¿Qué modelo está configurado?"]);
+                $"Groq respondió con error {(int)response.StatusCode}. Verifica la llave y que el servidor tenga salida a internet. Detalle: {SummarizeError(responseBody)}",
+                [new AiCitation("Groq", "Chat Completions API", response.StatusCode.ToString())],
+                ["¿Cómo verifico la configuración del AI?", "¿Qué modelo está configurado?"]);
         }
 
-        var answer = ExtractOutputText(responseBody);
+        var answer = ExtractChatAnswer(responseBody);
         if (string.IsNullOrWhiteSpace(answer))
         {
-            answer = "OpenAI respondió, pero Fidelis no pudo leer texto de salida. Hay que revisar el formato de respuesta recibido.";
+            answer = "Groq respondió, pero no se pudo leer el texto de salida. Revisa el formato de respuesta.";
         }
 
         return new AiAnswer(
@@ -113,7 +116,7 @@ public sealed class OpenAiAdvisorService(
             [
                 new AiCitation("Dashboard", "Cuentas bancarias", null),
                 new AiCitation("Reportes", "Profit and Loss", $"Desde {start:MM/dd/yyyy} hasta {end:MM/dd/yyyy}"),
-                new AiCitation("OpenAI", "Responses API", configuration["OpenAI:Model"] ?? "gpt-4.1-mini")
+                new AiCitation("Groq", model, "Chat Completions API")
             ],
             ["¿Qué gastos debo revisar primero?", "¿Qué ingresos explican mejor el periodo?", "¿Cómo comparo esto con conciliación bancaria?"]);
     }
@@ -172,63 +175,42 @@ public sealed class OpenAiAdvisorService(
             .SelectMany(section => section.Lines);
 
     private string? GetApiKey() =>
-        configuration["OpenAI:ApiKey"] ??
-        Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+        Environment.GetEnvironmentVariable("GROQ_API_KEY") ??
+        configuration["Groq:ApiKey"];
 
-    private string GetResponsesUrl()
+    private string GetChatUrl()
     {
-        var baseUrl = configuration["OpenAI:BaseUrl"];
-        if (string.IsNullOrWhiteSpace(baseUrl))
-        {
-            baseUrl = "https://api.openai.com/v1";
-        }
-
-        return $"{baseUrl.TrimEnd('/')}/responses";
+        var baseUrl = configuration["Groq:BaseUrl"] ?? "https://api.groq.com/openai/v1";
+        return $"{baseUrl.TrimEnd('/')}/chat/completions";
     }
 
-    private static string ExtractOutputText(string responseBody)
+    private static string ExtractChatAnswer(string responseBody)
     {
-        using var document = JsonDocument.Parse(responseBody);
-        if (document.RootElement.TryGetProperty("output_text", out var outputText) &&
-            outputText.ValueKind == JsonValueKind.String)
+        try
         {
-            return outputText.GetString() ?? string.Empty;
-        }
-
-        if (!document.RootElement.TryGetProperty("output", out var output) ||
-            output.ValueKind != JsonValueKind.Array)
-        {
-            return string.Empty;
-        }
-
-        var parts = new List<string>();
-        foreach (var item in output.EnumerateArray())
-        {
-            if (!item.TryGetProperty("content", out var content) ||
-                content.ValueKind != JsonValueKind.Array)
+            using var document = JsonDocument.Parse(responseBody);
+            if (document.RootElement.TryGetProperty("choices", out var choices) &&
+                choices.ValueKind == JsonValueKind.Array &&
+                choices.GetArrayLength() > 0)
             {
-                continue;
-            }
-
-            foreach (var contentItem in content.EnumerateArray())
-            {
-                if (contentItem.TryGetProperty("text", out var text) &&
-                    text.ValueKind == JsonValueKind.String)
+                var first = choices[0];
+                if (first.TryGetProperty("message", out var msg) &&
+                    msg.TryGetProperty("content", out var content) &&
+                    content.ValueKind == JsonValueKind.String)
                 {
-                    parts.Add(text.GetString() ?? string.Empty);
+                    return content.GetString() ?? string.Empty;
                 }
             }
         }
+        catch (JsonException) { }
 
-        return string.Join(Environment.NewLine, parts.Where(part => !string.IsNullOrWhiteSpace(part)));
+        return string.Empty;
     }
 
     private static string SummarizeError(string responseBody)
     {
         if (string.IsNullOrWhiteSpace(responseBody))
-        {
             return "sin cuerpo de respuesta.";
-        }
 
         try
         {
@@ -239,10 +221,7 @@ public sealed class OpenAiAdvisorService(
                 return message.GetString() ?? responseBody;
             }
         }
-        catch (JsonException)
-        {
-            // Return a clipped plain response below.
-        }
+        catch (JsonException) { }
 
         return responseBody.Length > 300 ? responseBody[..300] : responseBody;
     }
