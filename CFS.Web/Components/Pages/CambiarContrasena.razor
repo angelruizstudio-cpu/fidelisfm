@@ -140,7 +140,9 @@
 
         if (ok)
         {
-            Nav.NavigateTo("/login?msg=passwordset", forceLoad: true);
+            // Sign out so the cookie (which still carries MustChangePassword=true)
+            // is discarded and the user logs in with the new password.
+            Nav.NavigateTo("/logout", forceLoad: true);
         }
         else
         {

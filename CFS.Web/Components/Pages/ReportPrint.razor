@@ -1,4 +1,5 @@
 @page "/reportes/imprimir"
+@attribute [Authorize(Roles = "Administrador,Tesorero,Finanzas")]
 @layout PrintLayout
 @inject IReportRepository ReportRepository
 @inject AuthenticationStateProvider AuthenticationStateProvider

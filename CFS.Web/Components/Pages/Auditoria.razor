@@ -1,4 +1,5 @@
 @page "/auditoria"
+@attribute [Authorize(Roles = "Administrador,Auditor")]
 @rendermode InteractiveServer
 @inject IAuditLogRepository AuditLogRepository
 @inject AuthenticationStateProvider AuthenticationStateProvider

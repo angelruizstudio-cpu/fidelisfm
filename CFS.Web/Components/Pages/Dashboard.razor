@@ -1,4 +1,5 @@
 @page "/dashboard"
+@attribute [Authorize(Roles = "Administrador,Tesorero,Finanzas")]
 @rendermode InteractiveServer
 @inject IDashboardRepository DashboardRepository
 @inject IOrganizationLabelService OrganizationLabelService
