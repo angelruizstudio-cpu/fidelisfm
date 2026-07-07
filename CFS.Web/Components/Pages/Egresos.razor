@@ -1,4 +1,5 @@
 @page "/egresos"
+@attribute [Authorize(Roles = "Administrador,Tesorero,Auditor,Finanzas")]
 @rendermode InteractiveServer
 @inject IExpenseRepository ExpenseRepository
 @inject ICheckRepository CheckRepository

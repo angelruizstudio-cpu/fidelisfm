@@ -2,6 +2,7 @@
 @inject IConfiguration Configuration
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject ISubscriptionService SubscriptionService
+@inject NavigationManager Nav
 
 <div class="app-shell">
     <aside class="sidebar">
@@ -64,6 +65,14 @@
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+
+        // A user with a temporary password cannot use the app until they set their own.
+        if (authState.User.FindFirst("MustChangePassword")?.Value == "true")
+        {
+            Nav.NavigateTo("/cambiar-contrasena?first=true", forceLoad: true);
+            return;
+        }
+
         subscription = await SubscriptionService.GetCurrentAsync(authState.User);
     }
 

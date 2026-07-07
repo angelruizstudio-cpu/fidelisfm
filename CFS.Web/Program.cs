@@ -8,7 +8,9 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using System.Security.Claims;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -27,12 +29,27 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
     .AddCookie(options =>
     {
         options.Cookie.Name = "CFS.Auth";
+        options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+        options.Cookie.SameSite = SameSiteMode.Lax;
+        options.ExpireTimeSpan = TimeSpan.FromHours(8);
         options.LoginPath = "/login";
         options.LogoutPath = "/logout";
         options.AccessDeniedPath = "/login";
         options.SlidingExpiration = true;
     });
 builder.Services.AddAuthorization();
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("auth", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1)
+            }));
+});
 builder.Services.AddScoped<ITenantContext, HttpTenantContext>();
 builder.Services.AddHttpClient<IAiAdvisorService, OpenAiAdvisorService>();
 builder.Services.AddScoped<IStripeCheckoutService, StripeCheckoutService>();
@@ -102,6 +119,7 @@ if (!app.Environment.IsDevelopment())
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
 
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseAntiforgery();
@@ -323,7 +341,7 @@ app.MapPost("/login", async (
     {
         return Results.Redirect($"/login?error=database&returnUrl={Uri.EscapeDataString(GetSafeReturnUrl(returnUrl))}");
     }
-}).AllowAnonymous();
+}).AllowAnonymous().RequireRateLimiting("auth");
 
 app.MapPost("/switch-tenant/{tenantId:int}", async (
     int tenantId,
@@ -370,11 +388,16 @@ app.MapPost("/api/password/reset", async (
         return Results.Redirect($"/cambiar-contrasena?token={Uri.EscapeDataString(token ?? string.Empty)}&error=invalid");
     }
 
+    if (newPassword.Length < 8)
+    {
+        return Results.Redirect($"/cambiar-contrasena?token={Uri.EscapeDataString(token)}&error=invalid");
+    }
+
     var ok = await userManagement.ConsumeResetTokenAsync(token, newPassword, httpContext.RequestAborted);
     return ok
         ? Results.Redirect("/login?msg=passwordset")
         : Results.Redirect($"/cambiar-contrasena?token={Uri.EscapeDataString(token)}&error=expired");
-}).AllowAnonymous();
+}).AllowAnonymous().RequireRateLimiting("auth");
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

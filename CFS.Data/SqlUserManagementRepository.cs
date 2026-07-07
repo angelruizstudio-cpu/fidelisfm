@@ -12,6 +12,7 @@ public sealed class SqlUserManagementRepository(SqlConnectionFactory connectionF
     private const int SaltSize = 16;
     private const int HashSize = 32;
     private const int TokenExpiryHours = 48;
+    private const int MinPasswordLength = 8;
 
     private readonly int _tenantId = tenantContext.TenantId;
 
@@ -254,6 +255,8 @@ public sealed class SqlUserManagementRepository(SqlConnectionFactory connectionF
 
     public async Task<bool> ConsumeResetTokenAsync(string token, string newPassword, CancellationToken cancellationToken = default)
     {
+        if (newPassword.Length < MinPasswordLength) return false;
+
         var info = await ValidateResetTokenAsync(token, cancellationToken);
         if (info is null || !info.IsValid) return false;
 
@@ -266,11 +269,13 @@ public sealed class SqlUserManagementRepository(SqlConnectionFactory connectionF
             var salt = RandomNumberGenerator.GetBytes(SaltSize);
             var hash = Rfc2898DeriveBytes.Pbkdf2(newPassword, salt, Iterations, HashAlgorithmName.SHA256, HashSize);
 
+            // IsActive = 1 in the WHERE (not the SET): a deactivated user must not be able
+            // to re-enable their own account with a leftover reset link.
             const string updateUser = """
                 UPDATE dbo.Usuarios
                    SET ContrasenaSalt = @salt, ContrasenaHash = @hash,
-                       MustChangePassword = 0, IsActive = 1
-                 WHERE ID_Usuario = @userId;
+                       MustChangePassword = 0
+                 WHERE ID_Usuario = @userId AND IsActive = 1;
                 """;
 
             await using (var cmd = new SqlCommand(updateUser, connection, transaction))
@@ -278,7 +283,11 @@ public sealed class SqlUserManagementRepository(SqlConnectionFactory connectionF
                 cmd.Parameters.Add("@salt", SqlDbType.VarBinary, SaltSize).Value = salt;
                 cmd.Parameters.Add("@hash", SqlDbType.VarBinary, HashSize).Value = hash;
                 cmd.Parameters.Add("@userId", SqlDbType.Int).Value = info.UserId;
-                await cmd.ExecuteNonQueryAsync(cancellationToken);
+                if (await cmd.ExecuteNonQueryAsync(cancellationToken) == 0)
+                {
+                    await transaction.RollbackAsync(cancellationToken);
+                    return false;
+                }
             }
 
             const string markUsed = "UPDATE dbo.PasswordResetTokens SET UsedAt = SYSUTCDATETIME() WHERE Token = @token;";
@@ -300,6 +309,8 @@ public sealed class SqlUserManagementRepository(SqlConnectionFactory connectionF
 
     public async Task<bool> ChangePasswordAsync(int userId, string newPassword, CancellationToken cancellationToken = default)
     {
+        if (newPassword.Length < MinPasswordLength) return false;
+
         await using var connection = connectionFactory.Create();
         await connection.OpenAsync(cancellationToken);
 
