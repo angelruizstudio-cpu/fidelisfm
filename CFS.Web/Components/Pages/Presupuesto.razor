@@ -4,6 +4,7 @@
 @using System.Security.Claims
 @inject IBudgetRepository BudgetRepository
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ISubscriptionService SubscriptionService
 
 <PageTitle>Presupuesto — Fidelis</PageTitle>
 
@@ -12,39 +13,57 @@
         <p class="eyebrow">Planeación financiera</p>
         <h1>Presupuesto @year</h1>
     </div>
-    <div class="bud-controls">
-        <label class="bud-control">
-            <span>Año</span>
-            <select class="form-select" @bind="year" @bind:after="LoadAsync">
-                @foreach (var y in YearOptions)
-                {
-                    <option value="@y">@y</option>
-                }
-            </select>
-        </label>
-        <label class="bud-control">
-            <span>Ver hasta</span>
-            <select class="form-select" @bind="month" @bind:after="LoadAsync">
-                @for (var m = 1; m <= 12; m++)
-                {
-                    <option value="@m">@MonthName(m)</option>
-                }
-            </select>
-        </label>
-    </div>
+    @if (hasAccess)
+    {
+        <div class="bud-controls">
+            <label class="bud-control">
+                <span>Año</span>
+                <select class="form-select" @bind="year" @bind:after="LoadAsync">
+                    @foreach (var y in YearOptions)
+                    {
+                        <option value="@y">@y</option>
+                    }
+                </select>
+            </label>
+            <label class="bud-control">
+                <span>Ver hasta</span>
+                <select class="form-select" @bind="month" @bind:after="LoadAsync">
+                    @for (var m = 1; m <= 12; m++)
+                    {
+                        <option value="@m">@MonthName(m)</option>
+                    }
+                </select>
+            </label>
+        </div>
+    }
 </div>
 
-@if (!string.IsNullOrWhiteSpace(statusMessage))
+@if (isLoadingAccess)
 {
-    <div class="alert @statusCss" role="alert">@statusMessage</div>
+    <div class="status-panel">Cargando permisos...</div>
 }
-
-@if (overview is null)
+else if (!hasAccess)
 {
-    <div class="status-panel">Cargando presupuesto...</div>
+    <section class="ai-advisor-shell">
+        <div class="ai-empty-state">
+            <h2>Presupuesto no disponible</h2>
+            <p>Esta función está reservada para cuentas Founder.</p>
+        </div>
+    </section>
 }
 else
 {
+    @if (!string.IsNullOrWhiteSpace(statusMessage))
+    {
+        <div class="alert @statusCss" role="alert">@statusMessage</div>
+    }
+
+    @if (overview is null)
+    {
+        <div class="status-panel">Cargando presupuesto...</div>
+    }
+    else
+    {
     <div class="bud-summary-cards">
         <div class="bud-card bud-card--income">
             <span class="bud-card-label">Ingresos</span>
@@ -72,6 +91,7 @@ else
         </button>
         <span class="bud-hint">El monto anual se divide entre 12 para calcular la meta mensual.</span>
     </div>
+    }
 }
 
 @code {
@@ -82,6 +102,8 @@ else
     private string? statusMessage;
     private string statusCss = "alert-info";
     private string userName = "sistema";
+    private bool isLoadingAccess = true;
+    private bool hasAccess;
 
     // categoryId -> annual budget being edited in the form
     private readonly Dictionary<int, decimal> edits = new();
@@ -100,7 +122,16 @@ else
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         userName = authState.User.FindFirst(ClaimTypes.Name)?.Value
                    ?? authState.User.Identity?.Name ?? "sistema";
-        await LoadAsync();
+
+        // Presupuesto is reserved for Founder accounts.
+        var subscription = await SubscriptionService.GetCurrentAsync(authState.User);
+        hasAccess = subscription.IsFounderAccount;
+        isLoadingAccess = false;
+
+        if (hasAccess)
+        {
+            await LoadAsync();
+        }
     }
 
     private async Task LoadAsync()
