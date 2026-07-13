@@ -535,7 +535,6 @@ public sealed class DemoReportRepository : IReportRepository
     [
         new("profit-loss", "Profit and Loss", "Resumen de ingresos, gastos y net income por categoría.", true),
         new("profit-loss-detail", "Profit and Loss Detail", "Detalle transaccional del Profit and Loss.", true),
-        new("balance-sheet", "Balance Sheet", "Balance por cuentas bancarias activas.", true),
         new("tithes-members", "Diezmos (Miembros que diezman)", "Miembros con diezmos registrados en el periodo.", true)
     ];
 
