@@ -13,7 +13,6 @@ public sealed class SqlReportRepository(SqlConnectionFactory connectionFactory, 
     [
         new("profit-loss", "Profit and Loss", "Resumen de ingresos, gastos y net income por categoría.", true),
         new("profit-loss-detail", "Profit and Loss Detail", "Detalle transaccional del Profit and Loss.", true),
-        new("balance-sheet", "Balance Sheet", "Balance por cuentas bancarias activas.", true),
         new("tithes-members", "Diezmos (Miembros que diezman)", "Miembros con diezmos registrados en el periodo.", true)
     ];
 
@@ -57,7 +56,6 @@ public sealed class SqlReportRepository(SqlConnectionFactory connectionFactory, 
         return request.Key switch
         {
             "profit-loss-detail" => await GetProfitAndLossDetailAsync(connection, request, _tenantId, cancellationToken),
-            "balance-sheet" => await GetBalanceSheetAsync(connection, request, _tenantId, cancellationToken),
             "tithes-members" => await GetTithesByMemberAsync(connection, request, _tenantId, cancellationToken),
             _ => await GetProfitAndLossAsync(connection, request, _tenantId, cancellationToken)
         };
@@ -214,100 +212,6 @@ public sealed class SqlReportRepository(SqlConnectionFactory connectionFactory, 
             DateTime.Now);
     }
 
-    private static async Task<FinancialReport> GetBalanceSheetAsync(
-        SqlConnection connection,
-        ReportRequest request,
-        int tenantId,
-        CancellationToken cancellationToken)
-    {
-        var hasStartDate = await HasAccountStartDateColumnAsync(connection, cancellationToken);
-        var startDateSelect = hasStartDate
-            ? "CAST(ISNULL(Cta.FechaInicioSaldo, '19000101') AS date)"
-            : "CAST('19000101' AS date)";
-
-        var sql = $"""
-            SELECT Cta.NombreCuenta,
-                   CAST(ISNULL(Cta.SaldoInicial, 0)
-                        + ISNULL(D.TotalDepositos, 0)
-                        + ISNULL(I.IngresosDirectos, 0)
-                        - ISNULL(E.Egresos, 0) AS decimal(18, 2)) AS SaldoActual
-            FROM dbo.CuentasBancarias Cta
-            CROSS APPLY (SELECT {startDateSelect} AS FechaInicioSaldo) Inicio
-            OUTER APPLY (
-                SELECT SUM(MontoTotal) AS TotalDepositos
-                FROM dbo.Depositos
-                WHERE ID_Cuenta_FK = Cta.ID_Cuenta
-                  AND ID_Tenant_FK = @tenantId
-                  AND FechaDeposito >= Inicio.FechaInicioSaldo
-                  AND FechaDeposito <= @endDate
-                  AND ISNULL(Anulado, 0) = 0
-            ) D
-            OUTER APPLY (
-                SELECT SUM(T.Monto) AS IngresosDirectos
-                FROM dbo.Transacciones T
-                INNER JOIN dbo.Subcategorias S ON S.ID_Subcategoria = T.ID_Subcategoria_FK
-                INNER JOIN dbo.Categorias Cat ON Cat.ID_Categoria = S.ID_Categoria_FK
-                WHERE T.ID_Cuenta_FK = Cta.ID_Cuenta
-                  AND T.ID_Tenant_FK = @tenantId
-                  AND T.Fecha >= Inicio.FechaInicioSaldo
-                  AND T.Fecha <= @endDate
-                  AND Cat.TipoCategoria = 'Ingreso'
-                  AND ISNULL(T.Anulada, 0) = 0
-                  AND T.MetodoPago NOT IN ('Efectivo', 'Cheque')
-                  AND LOWER(ISNULL(S.NombreSubcategoria, '')) NOT LIKE '%saldo inicial%'
-            ) I
-            OUTER APPLY (
-                SELECT SUM(T.Monto) AS Egresos
-                FROM dbo.Transacciones T
-                INNER JOIN dbo.Subcategorias S ON S.ID_Subcategoria = T.ID_Subcategoria_FK
-                INNER JOIN dbo.Categorias Cat ON Cat.ID_Categoria = S.ID_Categoria_FK
-                WHERE T.ID_Cuenta_FK = Cta.ID_Cuenta
-                  AND T.ID_Tenant_FK = @tenantId
-                  AND T.Fecha >= Inicio.FechaInicioSaldo
-                  AND T.Fecha <= @endDate
-                  AND Cat.TipoCategoria = 'Egreso'
-                  AND ISNULL(T.Anulada, 0) = 0
-            ) E
-            WHERE Cta.NombreCuenta NOT LIKE '%(OLD-ID-%'
-              AND Cta.ID_Tenant_FK = @tenantId
-              AND (@accountId IS NULL OR Cta.ID_Cuenta = @accountId)
-            ORDER BY Cta.NombreCuenta;
-            """;
-
-        var lines = new List<ReportLine>();
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.Add("@endDate", SqlDbType.Date).Value = request.EndDate.Date;
-        command.Parameters.Add("@accountId", SqlDbType.Int).Value = request.AccountId.HasValue ? request.AccountId.Value : DBNull.Value;
-        command.Parameters.AddWithValue("@tenantId", tenantId);
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
-        {
-            var account = reader.GetString(reader.GetOrdinal("NombreCuenta"));
-            var amount = reader.GetDecimal(reader.GetOrdinal("SaldoActual"));
-            lines.Add(new ReportLine($"Assets:{account}", account, amount, 1, false, false, []));
-        }
-
-        var totalAssets = lines.Sum(l => l.Amount);
-        var sections = new List<ReportSection>
-        {
-            new("Assets", AddTotalLine(lines, "Total Assets", totalAssets), totalAssets)
-        };
-
-        var insights = BuildInsights(sections, totalAssets, 0);
-        sections = MarkInsightLines(sections, insights).ToList();
-
-        return new FinancialReport(
-            request.Key,
-            "Balance Sheet",
-            $"As of {request.EndDate:MMMM d, yyyy}",
-            sections,
-            totalAssets,
-            0,
-            totalAssets,
-            insights,
-            DateTime.Now);
-    }
-
     private static async Task<FinancialReport> GetTithesByMemberAsync(
         SqlConnection connection,
         ReportRequest request,
@@ -376,17 +280,6 @@ public sealed class SqlReportRepository(SqlConnectionFactory connectionFactory, 
         command.Parameters.Add("@accountId", SqlDbType.Int).Value = request.AccountId.HasValue ? request.AccountId.Value : DBNull.Value;
         command.Parameters.AddWithValue("@tenantId", tenantId);
         return command;
-    }
-
-    private static async Task<bool> HasAccountStartDateColumnAsync(
-        SqlConnection connection,
-        CancellationToken cancellationToken)
-    {
-        await using var command = new SqlCommand(
-            "SELECT CASE WHEN COL_LENGTH('dbo.CuentasBancarias', 'FechaInicioSaldo') IS NULL THEN 0 ELSE 1 END;",
-            connection);
-        var value = await command.ExecuteScalarAsync(cancellationToken);
-        return Convert.ToInt32(value) == 1;
     }
 
     private static IReadOnlyList<ReportLine> AddTotalLine(IReadOnlyList<ReportLine> lines, string label, decimal total)
