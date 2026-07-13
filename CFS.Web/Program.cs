@@ -78,6 +78,7 @@ if (demoEnabled)
     builder.Services.AddScoped<IReportRepository, DemoReportRepository>();
     builder.Services.AddScoped<IAutomationRepository, DemoAutomationRepository>();
     builder.Services.AddScoped<IUserManagementRepository, DemoUserManagementRepository>();
+    builder.Services.AddScoped<IBudgetRepository, DemoBudgetRepository>();
 }
 else
 {
@@ -103,6 +104,7 @@ else
     builder.Services.AddScoped<IReportRepository, SqlReportRepository>();
     builder.Services.AddScoped<IAutomationRepository, SqlAutomationRepository>();
     builder.Services.AddScoped<IUserManagementRepository, SqlUserManagementRepository>();
+    builder.Services.AddScoped<IBudgetRepository, SqlBudgetRepository>();
 }
 
 builder.Services.AddScoped<IEmailService, SmtpEmailService>();

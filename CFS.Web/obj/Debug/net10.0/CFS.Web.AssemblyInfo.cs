@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("CFS.Web")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+78f90cd33bd599457f31ec53f41695cd5a6d96d4")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+7adfb00e0357404b870c16574d55de5be323577a")]
 [assembly: System.Reflection.AssemblyProductAttribute("CFS.Web")]
 [assembly: System.Reflection.AssemblyTitleAttribute("CFS.Web")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

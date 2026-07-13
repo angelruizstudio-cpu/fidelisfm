@@ -649,6 +649,34 @@ public sealed class DemoAutomationRepository : IAutomationRepository
         Task.FromResult(new AutomationRunResult(0, ["Modo demo: las automatizaciones no generan transacciones reales."]));
 }
 
+public sealed class DemoBudgetRepository : IBudgetRepository
+{
+    public Task<BudgetOverview> GetOverviewAsync(int year, int month, CancellationToken cancellationToken = default)
+    {
+        if (month is < 1 or > 12) month = 12;
+
+        BudgetCategoryLine Line(int id, string name, string type, decimal annual, decimal actual) =>
+            new(id, name, type, annual, Math.Round(annual / 12m * month, 2), actual);
+
+        var income = new List<BudgetCategoryLine>
+        {
+            Line(1, "Diezmos", BudgetCategoryType.Income, 120000m, 9800m),
+            Line(2, "Ofrendas", BudgetCategoryType.Income, 36000m, 2600m),
+        };
+        var expense = new List<BudgetCategoryLine>
+        {
+            Line(10, "Utilidades", BudgetCategoryType.Expense, 6000m, 480m),
+            Line(11, "Mantenimiento", BudgetCategoryType.Expense, 3600m, 410m),
+            Line(12, "Misiones", BudgetCategoryType.Expense, 12000m, 1000m),
+        };
+
+        return Task.FromResult(new BudgetOverview(year, month, income, expense));
+    }
+
+    public Task SaveCategoryBudgetAsync(int categoryId, int year, decimal annualAmount, string userName, CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
+}
+
 public sealed class DemoUserManagementRepository : IUserManagementRepository
 {
     private static readonly List<TenantUser> Users =

@@ -85,6 +85,13 @@
                 Reportes
             </NavLink>
         }
+        @if (CanSee("presupuesto"))
+        {
+            <NavLink class="nav-link" href="presupuesto">
+                <span class="nav-icon" aria-hidden="true">◱</span>
+                Presupuesto
+            </NavLink>
+        }
         @if (HasFeature(CfsFeatures.Audit) && CanSee("auditoria"))
         {
             <NavLink class="nav-link" href="auditoria">
@@ -188,7 +195,7 @@
             "auditoria" => isAuditor,
 
             // Tesorero + legacy — NOT auditor, NOT admin-only
-            "dashboard" or "cheques" or "depositos" or "conciliacion" or "reportes" or "plan" =>
+            "dashboard" or "cheques" or "depositos" or "conciliacion" or "reportes" or "plan" or "presupuesto" =>
                 isTesorero || legacy,
 
             // Administrador only
