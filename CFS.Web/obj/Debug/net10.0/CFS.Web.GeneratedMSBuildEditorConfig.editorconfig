@@ -122,6 +122,10 @@ build_metadata.AdditionalFiles.CssScope =
 build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9QYWdlcy9QbGFuLnJhem9y
 build_metadata.AdditionalFiles.CssScope = 
 
+[/home/user/fidelisfm/CFS.Web/Components/Pages/Presupuesto.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9QYWdlcy9QcmVzdXB1ZXN0by5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
 [/home/user/fidelisfm/CFS.Web/Components/Pages/Reportes.razor]
 build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9QYWdlcy9SZXBvcnRlcy5yYXpvcg==
 build_metadata.AdditionalFiles.CssScope = 

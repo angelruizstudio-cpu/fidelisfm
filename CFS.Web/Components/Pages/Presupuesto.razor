@@ -1,0 +1,230 @@
+@page "/presupuesto"
+@attribute [Authorize(Roles = "Administrador,Tesorero,Finanzas")]
+@rendermode InteractiveServer
+@using System.Security.Claims
+@inject IBudgetRepository BudgetRepository
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<PageTitle>Presupuesto — Fidelis</PageTitle>
+
+<div class="screen-header">
+    <div>
+        <p class="eyebrow">Planeación financiera</p>
+        <h1>Presupuesto @year</h1>
+    </div>
+    <div class="bud-controls">
+        <label class="bud-control">
+            <span>Año</span>
+            <select class="form-select" @bind="year" @bind:after="LoadAsync">
+                @foreach (var y in YearOptions)
+                {
+                    <option value="@y">@y</option>
+                }
+            </select>
+        </label>
+        <label class="bud-control">
+            <span>Ver hasta</span>
+            <select class="form-select" @bind="month" @bind:after="LoadAsync">
+                @for (var m = 1; m <= 12; m++)
+                {
+                    <option value="@m">@MonthName(m)</option>
+                }
+            </select>
+        </label>
+    </div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(statusMessage))
+{
+    <div class="alert @statusCss" role="alert">@statusMessage</div>
+}
+
+@if (overview is null)
+{
+    <div class="status-panel">Cargando presupuesto...</div>
+}
+else
+{
+    <div class="bud-summary-cards">
+        <div class="bud-card bud-card--income">
+            <span class="bud-card-label">Ingresos</span>
+            <span class="bud-card-actual">@overview.IncomeActual.ToString("C0")</span>
+            <span class="bud-card-sub">de @overview.IncomeAnnualBudget.ToString("C0") anual · esperado @overview.IncomeExpected.ToString("C0")</span>
+        </div>
+        <div class="bud-card bud-card--expense">
+            <span class="bud-card-label">Gastos</span>
+            <span class="bud-card-actual">@overview.ExpenseActual.ToString("C0")</span>
+            <span class="bud-card-sub">de @overview.ExpenseAnnualBudget.ToString("C0") anual · esperado @overview.ExpenseExpected.ToString("C0")</span>
+        </div>
+        <div class="bud-card bud-card--net">
+            <span class="bud-card-label">Neto real</span>
+            <span class="bud-card-actual">@((overview.IncomeActual - overview.ExpenseActual).ToString("C0"))</span>
+            <span class="bud-card-sub">a @MonthName(overview.Month) @overview.Year</span>
+        </div>
+    </div>
+
+    @RenderSection("Ingresos", overview.IncomeLines)
+    @RenderSection("Gastos", overview.ExpenseLines)
+
+    <div class="bud-actions">
+        <button class="btn btn-primary" @onclick="SaveAllAsync" disabled="@isSaving">
+            @(isSaving ? "Guardando..." : "Guardar presupuesto")
+        </button>
+        <span class="bud-hint">El monto anual se divide entre 12 para calcular la meta mensual.</span>
+    </div>
+}
+
+@code {
+    private int year = DateTime.Today.Year;
+    private int month = DateTime.Today.Month;
+    private BudgetOverview? overview;
+    private bool isSaving;
+    private string? statusMessage;
+    private string statusCss = "alert-info";
+    private string userName = "sistema";
+
+    // categoryId -> annual budget being edited in the form
+    private readonly Dictionary<int, decimal> edits = new();
+
+    private IEnumerable<int> YearOptions
+    {
+        get
+        {
+            var current = DateTime.Today.Year;
+            for (var y = current + 1; y >= current - 3; y--) yield return y;
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        userName = authState.User.FindFirst(ClaimTypes.Name)?.Value
+                   ?? authState.User.Identity?.Name ?? "sistema";
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        overview = null;
+        statusMessage = null;
+        var data = await BudgetRepository.GetOverviewAsync(year, month);
+
+        edits.Clear();
+        foreach (var line in data.IncomeLines.Concat(data.ExpenseLines))
+        {
+            edits[line.CategoryId] = line.AnnualBudget;
+        }
+
+        overview = data;
+    }
+
+    private async Task SaveAllAsync()
+    {
+        if (overview is null) return;
+
+        isSaving = true;
+        statusMessage = null;
+
+        try
+        {
+            foreach (var line in overview.IncomeLines.Concat(overview.ExpenseLines))
+            {
+                var newValue = edits.GetValueOrDefault(line.CategoryId, line.AnnualBudget);
+                if (newValue != line.AnnualBudget)
+                {
+                    await BudgetRepository.SaveCategoryBudgetAsync(line.CategoryId, year, newValue, userName);
+                }
+            }
+
+            // LoadAsync clears statusMessage, so set the confirmation after it reloads.
+            await LoadAsync();
+            statusMessage = "Presupuesto guardado correctamente.";
+            statusCss = "alert-success";
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"No se pudo guardar el presupuesto: {ex.Message}";
+            statusCss = "alert-warning";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private RenderFragment RenderSection(string title, IReadOnlyList<BudgetCategoryLine> lines) => __builder =>
+    {
+        <section class="bud-section">
+            <h2 class="bud-section-title">@title</h2>
+            @if (lines.Count == 0)
+            {
+                <p class="bud-empty">No hay categorías de @title.ToLower() registradas.</p>
+            }
+            else
+            {
+                <div class="bud-table">
+                    <div class="bud-row bud-row--head">
+                        <span class="bud-cat">Categoría</span>
+                        <span class="bud-num">Presupuesto anual</span>
+                        <span class="bud-num">Meta a la fecha</span>
+                        <span class="bud-num">Real</span>
+                        <span class="bud-num">Diferencia</span>
+                        <span class="bud-bar-col">Avance</span>
+                    </div>
+                    @foreach (var line in lines)
+                    {
+                        var status = StatusOf(line);
+                        <div class="bud-row">
+                            <span class="bud-cat">@line.CategoryName</span>
+                            <span class="bud-num">
+                                <input class="bud-input" type="number" min="0" step="1"
+                                       value="@edits.GetValueOrDefault(line.CategoryId, line.AnnualBudget)"
+                                       @onchange="e => OnEdit(line.CategoryId, e)" />
+                            </span>
+                            <span class="bud-num bud-muted">@line.ExpectedToDate.ToString("C0")</span>
+                            <span class="bud-num">@line.ActualToDate.ToString("C0")</span>
+                            <span class="bud-num @(line.Variance >= 0 ? "bud-good" : "bud-bad")">
+                                @(line.Variance >= 0 ? "+" : "")@line.Variance.ToString("C0")
+                            </span>
+                            <span class="bud-bar-col">
+                                <span class="bud-bar">
+                                    <span class="bud-bar-fill bud-bar-@status"
+                                          style="width:@(Math.Min(line.PercentOfAnnual, 100))%"></span>
+                                </span>
+                                <span class="bud-bar-pct">@line.PercentOfAnnual%</span>
+                            </span>
+                        </div>
+                    }
+                </div>
+            }
+        </section>
+    };
+
+    private void OnEdit(int categoryId, ChangeEventArgs e)
+    {
+        if (decimal.TryParse(e.Value?.ToString(), out var value))
+        {
+            edits[categoryId] = value < 0 ? 0 : value;
+        }
+    }
+
+    // green = on track / favorable, warn = slightly behind, over = unfavorable beyond 15%
+    private static string StatusOf(BudgetCategoryLine line)
+    {
+        if (line.AnnualBudget <= 0) return "none";
+        if (line.Variance >= 0) return "good";
+
+        var overshoot = line.ExpectedToDate <= 0
+            ? 1m
+            : Math.Abs(line.Variance) / line.ExpectedToDate;
+        return overshoot <= 0.15m ? "warn" : "over";
+    }
+
+    private static string MonthName(int m) => m switch
+    {
+        1 => "Enero", 2 => "Febrero", 3 => "Marzo", 4 => "Abril",
+        5 => "Mayo", 6 => "Junio", 7 => "Julio", 8 => "Agosto",
+        9 => "Septiembre", 10 => "Octubre", 11 => "Noviembre", 12 => "Diciembre",
+        _ => m.ToString()
+    };
+}

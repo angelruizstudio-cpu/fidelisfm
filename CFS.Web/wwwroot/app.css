@@ -4185,3 +4185,102 @@ h1:focus {
     .um-user-status { grid-column: 2; }
     .um-user-actions { grid-column: 1 / -1; justify-content: flex-start; }
 }
+
+/* ── Presupuesto (Budget) ─────────────────────────────── */
+.bud-controls { display: flex; gap: 1rem; align-items: flex-end; }
+.bud-control { display: flex; flex-direction: column; gap: 0.25rem; }
+.bud-control span { font-size: 0.72rem; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.4px; }
+.bud-control .form-select { min-width: 130px; }
+
+.bud-summary-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+.bud-card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-left: 4px solid #9ca3af;
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+.bud-card--income  { border-left-color: #16a34a; }
+.bud-card--expense { border-left-color: #dc2626; }
+.bud-card--net     { border-left-color: #2563eb; }
+.bud-card-label  { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: #6b7280; }
+.bud-card-actual { font-size: 1.5rem; font-weight: 700; color: #182232; }
+.bud-card-sub    { font-size: 0.75rem; color: #9ca3af; }
+
+.bud-section { margin-bottom: 1.75rem; }
+.bud-section-title {
+    font-size: 1rem; font-weight: 700; color: #182232;
+    margin: 0 0 0.6rem; padding-bottom: 0.4rem; border-bottom: 2px solid #f3f4f6;
+}
+.bud-empty { color: #9ca3af; font-size: 0.875rem; }
+
+.bud-table { display: flex; flex-direction: column; gap: 0.3rem; }
+.bud-row {
+    display: grid;
+    grid-template-columns: 1.6fr 1fr 1fr 1fr 1fr 1.4fr;
+    align-items: center;
+    gap: 0.75rem;
+    background: #fff;
+    border: 1px solid #eef0f2;
+    border-radius: 8px;
+    padding: 0.5rem 0.85rem;
+}
+.bud-row--head {
+    background: transparent;
+    border: none;
+    padding: 0 0.85rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: #9ca3af;
+}
+.bud-cat { font-weight: 600; color: #111827; font-size: 0.875rem; }
+.bud-num { text-align: right; font-size: 0.85rem; color: #374151; font-variant-numeric: tabular-nums; }
+.bud-muted { color: #9ca3af; }
+.bud-good { color: #16a34a; font-weight: 600; }
+.bud-bad  { color: #dc2626; font-weight: 600; }
+
+.bud-input {
+    width: 100%;
+    max-width: 120px;
+    text-align: right;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    padding: 0.3rem 0.5rem;
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+}
+.bud-input:focus { outline: none; border-color: #c8a44a; box-shadow: 0 0 0 3px rgba(200,164,74,0.15); }
+
+.bud-bar-col { display: flex; align-items: center; gap: 0.5rem; }
+.bud-bar {
+    flex: 1;
+    height: 9px;
+    background: #f1f3f5;
+    border-radius: 999px;
+    overflow: hidden;
+}
+.bud-bar-fill { display: block; height: 100%; border-radius: 999px; transition: width 0.3s ease; }
+.bud-bar-good { background: #22c55e; }
+.bud-bar-warn { background: #f59e0b; }
+.bud-bar-over { background: #ef4444; }
+.bud-bar-none { background: #d1d5db; }
+.bud-bar-pct { font-size: 0.72rem; font-weight: 600; color: #6b7280; min-width: 36px; text-align: right; }
+
+.bud-actions { display: flex; align-items: center; gap: 1rem; margin-top: 0.5rem; }
+.bud-hint { font-size: 0.78rem; color: #9ca3af; }
+
+@media (max-width: 720px) {
+    .bud-row { grid-template-columns: 1.4fr 1fr 1fr; grid-auto-rows: auto; }
+    .bud-row--head { display: none; }
+    .bud-bar-col { grid-column: 1 / -1; }
+}
