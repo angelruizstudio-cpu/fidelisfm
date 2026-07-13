@@ -550,20 +550,35 @@ public sealed class DemoReportRepository : IReportRepository
         ReportRequest request,
         CancellationToken cancellationToken = default)
     {
-        var income = DemoData.Incomes
+        var showDetails = request.Key == "profit-loss-detail";
+
+        var incomeRows = DemoData.Incomes
             .Where(i => !i.IsVoided && i.Date.Date >= request.StartDate.Date && i.Date.Date <= request.EndDate.Date)
             .Where(i => request.AccountId is null || i.AccountId == request.AccountId.Value)
+            .ToList();
+        var income = incomeRows
             .GroupBy(i => i.SubcategoryName)
-            .Select(group => new ReportLine($"Ingreso:{group.Key}", group.Key, group.Sum(i => i.Amount), 1, false, true, []))
+            .Select(group =>
+            {
+                var ordered = group.OrderBy(i => i.Date).ToList();
+                var details = showDetails ? BuildDemoDetails(ordered) : [];
+                return new ReportLine($"Ingreso:{group.Key}", group.Key, group.Sum(i => i.Amount), 1, false, true, details);
+            })
             .ToList();
 
-        var expenseTotal = DemoData.Checks
+        var expenseRows = DemoData.Checks
             .Where(c => c.Status != "Anulado")
             .Where(c => request.AccountId is null || c.AccountId == request.AccountId.Value)
-            .Sum(c => c.Amount);
+            .OrderBy(c => c.CheckDate)
+            .ToList();
+        var expenseTotal = expenseRows.Sum(c => c.Amount);
+        var expenseDetails = showDetails
+            ? BuildRunningBalance(expenseRows.Select(c => new ReportDetailLine(
+                c.CheckDate, c.Memo ?? string.Empty, c.Payee, c.AccountName, "Cheques", c.Amount, c.CheckNumber, "Cheque")))
+            : [];
         var expenses = new List<ReportLine>
         {
-            new("Egreso:Cheques", "Cheques", expenseTotal, 1, false, true, [])
+            new("Egreso:Cheques", "Cheques", expenseTotal, 1, false, true, expenseDetails)
         };
 
         var totalIncome = income.Sum(i => i.Amount);
@@ -585,6 +600,24 @@ public sealed class DemoReportRepository : IReportRepository
             DateTime.Now);
 
         return Task.FromResult(report);
+    }
+
+    private static IReadOnlyList<ReportDetailLine> BuildDemoDetails(IReadOnlyList<IncomeTransaction> rows) =>
+        BuildRunningBalance(rows.Select(i => new ReportDetailLine(
+            i.Date, i.Description, i.MemberName ?? string.Empty, i.AccountName, i.SubcategoryName,
+            i.Amount, i.CheckNumber ?? string.Empty, i.PaymentMethod)));
+
+    private static IReadOnlyList<ReportDetailLine> BuildRunningBalance(IEnumerable<ReportDetailLine> rows)
+    {
+        var result = new List<ReportDetailLine>();
+        var runningBalance = 0m;
+        foreach (var row in rows)
+        {
+            runningBalance += row.Amount;
+            result.Add(row with { RunningBalance = runningBalance });
+        }
+
+        return result;
     }
 
     private static IReadOnlyList<ReportLine> AddTotal(IReadOnlyList<ReportLine> lines, string label, decimal total)

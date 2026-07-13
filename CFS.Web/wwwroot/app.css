@@ -4284,3 +4284,82 @@ h1:focus {
     .bud-row--head { display: none; }
     .bud-bar-col { grid-column: 1 / -1; }
 }
+
+/* ── P&L Detail: expandable transaction table (screen) ──────────── */
+.report-line.expandable {
+    cursor: pointer;
+}
+
+.report-line.expandable:hover {
+    background: #f7f9fb;
+}
+
+.line-expand-toggle {
+    display: inline-block;
+    width: 1rem;
+    color: #6b7280;
+    font-size: 0.75rem;
+}
+
+.report-detail-table {
+    display: flex;
+    flex-direction: column;
+    background: #fafbfc;
+    border-bottom: 1px solid #edf1f5;
+    padding: 0.35rem 0.4rem 0.35rem 3.5rem;
+    font-size: 0.8rem;
+}
+
+.report-detail-row {
+    display: grid;
+    grid-template-columns: 90px 90px 70px 1.1fr 1.4fr 1.1fr 100px 100px;
+    gap: 0.5rem;
+    padding: 0.25rem 0.3rem;
+    color: #374151;
+}
+
+.report-detail-row.report-detail-header {
+    font-weight: 700;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    color: #9ca3af;
+    border-bottom: 1px solid #e5e7eb;
+    padding-bottom: 0.35rem;
+}
+
+.report-detail-row .num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ── P&L Detail: transaction table (print/PDF) ──────────── */
+.formal-detail-table {
+    display: flex;
+    flex-direction: column;
+    padding: 0.02in 0.08in 0.06in 0.42in;
+    font-size: 7.5pt;
+}
+
+.formal-detail-row {
+    display: grid;
+    grid-template-columns: 0.7in 0.6in 0.5in 1fr 1.3fr 1fr 0.75in 0.75in;
+    gap: 0.06in;
+    padding: 0.015in 0;
+    color: #334155;
+}
+
+.formal-detail-row.formal-detail-header {
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 6.5pt;
+    letter-spacing: 0.2px;
+    color: #64748b;
+    border-bottom: 1px solid #d8dee7;
+    padding-bottom: 0.03in;
+}
+
+.formal-detail-row .num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}

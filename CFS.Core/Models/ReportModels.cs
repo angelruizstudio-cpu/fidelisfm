@@ -48,7 +48,9 @@ public sealed record ReportDetailLine(
     string AccountName,
     string CategoryName,
     decimal Amount,
-    string Reference);
+    string Reference,
+    string TransactionType = "",
+    decimal RunningBalance = 0);
 
 public sealed record ReportInsight(
     string LineKey,
