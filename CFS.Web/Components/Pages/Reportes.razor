@@ -143,16 +143,54 @@
                             {
                                 @foreach (var line in reportSection.Lines)
                                 {
-                                    <div class="report-line @(line.IsTotal ? "total" : "") level-@line.Level">
-                                        <span>@line.Label</span>
+                                    var expandable = line.Details.Count > 0;
+                                    var expanded = expandable && expandedLines.Contains(line.Key);
+                                    <div class="report-line @(line.IsTotal ? "total" : "") level-@line.Level @(expandable ? "expandable" : "")"
+                                         @onclick="@(expandable ? () => ToggleLine(line.Key) : null)">
+                                        <span>
+                                            @if (expandable)
+                                            {
+                                                <span class="line-expand-toggle">@(expanded ? "▾" : "▸")</span>
+                                            }
+                                            @line.Label
+                                        </span>
                                         <div>
                                             @if (line.HasInsight)
                                             {
-                                                <button class="insight-dot" title="Ver insight" @onclick="() => SelectInsight(line.Key)">✦</button>
+                                                <button class="insight-dot" title="Ver insight" @onclick="() => SelectInsight(line.Key)" @onclick:stopPropagation="true">✦</button>
                                             }
                                             <strong>@Money(line.Amount)</strong>
                                         </div>
                                     </div>
+
+                                    @if (expanded)
+                                    {
+                                        <div class="report-detail-table">
+                                            <div class="report-detail-row report-detail-header">
+                                                <span>Fecha</span>
+                                                <span>Tipo</span>
+                                                <span>Núm</span>
+                                                <span>Nombre</span>
+                                                <span>Descripción</span>
+                                                <span>Cuenta</span>
+                                                <span class="num">Monto</span>
+                                                <span class="num">Saldo</span>
+                                            </div>
+                                            @foreach (var detail in line.Details)
+                                            {
+                                                <div class="report-detail-row">
+                                                    <span>@detail.Date.ToString("MM/dd/yyyy")</span>
+                                                    <span>@detail.TransactionType</span>
+                                                    <span>@detail.Reference</span>
+                                                    <span>@(string.IsNullOrWhiteSpace(detail.Name) ? "—" : detail.Name)</span>
+                                                    <span>@(string.IsNullOrWhiteSpace(detail.Description) ? "—" : detail.Description)</span>
+                                                    <span>@detail.AccountName</span>
+                                                    <span class="num">@Money(detail.Amount)</span>
+                                                    <span class="num">@Money(detail.RunningBalance)</span>
+                                                </div>
+                                            }
+                                        </div>
+                                    }
                                 }
                             }
 
@@ -334,6 +372,7 @@
     private FinancialReport? report;
     private ReportInsight? selectedInsight;
     private HashSet<string> collapsedSections = [];
+    private HashSet<string> expandedLines = [];
     private string selectedReportKey = "profit-loss";
     private string selectedPeriod = "this-year";
     private int? selectedAccountId;
@@ -468,6 +507,7 @@
         isLoading = true;
         statusMessage = null;
         collapsedSections.Clear();
+        expandedLines.Clear();
 
         try
         {
@@ -489,6 +529,14 @@
         if (!collapsedSections.Add(section))
         {
             collapsedSections.Remove(section);
+        }
+    }
+
+    private void ToggleLine(string lineKey)
+    {
+        if (!expandedLines.Add(lineKey))
+        {
+            expandedLines.Remove(lineKey);
         }
     }
 

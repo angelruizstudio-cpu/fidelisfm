@@ -53,6 +53,35 @@ else if (report is not null)
                         <span>@line.Label</span>
                         <strong>@Money(line.Amount)</strong>
                     </div>
+
+                    @if (line.Details.Count > 0)
+                    {
+                        <div class="formal-detail-table">
+                            <div class="formal-detail-row formal-detail-header">
+                                <span>Fecha</span>
+                                <span>Tipo</span>
+                                <span>Núm</span>
+                                <span>Nombre</span>
+                                <span>Descripción</span>
+                                <span>Cuenta</span>
+                                <span class="num">Monto</span>
+                                <span class="num">Saldo</span>
+                            </div>
+                            @foreach (var detail in line.Details)
+                            {
+                                <div class="formal-detail-row">
+                                    <span>@detail.Date.ToString("MM/dd/yyyy")</span>
+                                    <span>@detail.TransactionType</span>
+                                    <span>@detail.Reference</span>
+                                    <span>@(string.IsNullOrWhiteSpace(detail.Name) ? "—" : detail.Name)</span>
+                                    <span>@(string.IsNullOrWhiteSpace(detail.Description) ? "—" : detail.Description)</span>
+                                    <span>@detail.AccountName</span>
+                                    <span class="num">@Money(detail.Amount)</span>
+                                    <span class="num">@Money(detail.RunningBalance)</span>
+                                </div>
+                            }
+                        </div>
+                    }
                 }
 
                 @if (reportSection.Name == "Income" && report.Key is "profit-loss" or "profit-loss-detail")

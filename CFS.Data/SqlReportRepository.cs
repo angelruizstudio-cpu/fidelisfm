@@ -131,7 +131,8 @@ public sealed class SqlReportRepository(SqlConnectionFactory connectionFactory, 
         CancellationToken cancellationToken)
     {
         const string sql = """
-            SELECT T.Fecha,
+            SELECT T.ID_Transaccion,
+                   T.Fecha,
                    ISNULL(T.Descripcion, '') AS Descripcion,
                    Cat.TipoCategoria,
                    ISNULL(Cat.NombreCategoria, Cat.TipoCategoria) AS NombreCategoria,
@@ -139,6 +140,7 @@ public sealed class SqlReportRepository(SqlConnectionFactory connectionFactory, 
                    Cta.NombreCuenta,
                    T.Monto,
                    ISNULL(T.NumeroCheque, '') AS NumeroCheque,
+                   ISNULL(T.MetodoPago, '') AS MetodoPago,
                    CASE WHEN M.ID_Miembro IS NULL THEN ''
                         ELSE LTRIM(RTRIM(M.Nombre)) + CASE WHEN LTRIM(RTRIM(M.Apellido)) <> '' THEN ' ' + LTRIM(RTRIM(M.Apellido)) ELSE '' END
                    END AS Nombre
@@ -156,45 +158,33 @@ public sealed class SqlReportRepository(SqlConnectionFactory connectionFactory, 
             ORDER BY Cat.TipoCategoria, Cat.NombreCategoria, S.NombreSubcategoria, T.Fecha, T.ID_Transaccion;
             """;
 
-        var income = new List<ReportLine>();
-        var expenses = new List<ReportLine>();
+        var rows = new List<DetailTransactionRow>();
         await using var command = CreateDateCommand(sql, connection, request, tenantId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
-            var type = reader.GetString(reader.GetOrdinal("TipoCategoria"));
-            var category = reader.GetString(reader.GetOrdinal("NombreCategoria"));
-            var subcategory = reader.GetString(reader.GetOrdinal("NombreSubcategoria"));
-            var description = reader.GetString(reader.GetOrdinal("Descripcion"));
-            var date = reader.GetDateTime(reader.GetOrdinal("Fecha"));
-            var amount = reader.GetDecimal(reader.GetOrdinal("Monto"));
-            var detail = new ReportDetailLine(
-                date,
-                description,
+            rows.Add(new DetailTransactionRow(
+                reader.GetString(reader.GetOrdinal("TipoCategoria")),
+                reader.GetString(reader.GetOrdinal("NombreCategoria")),
+                reader.GetString(reader.GetOrdinal("NombreSubcategoria")),
+                reader.GetDateTime(reader.GetOrdinal("Fecha")),
+                reader.GetString(reader.GetOrdinal("Descripcion")),
                 reader.GetString(reader.GetOrdinal("Nombre")),
                 reader.GetString(reader.GetOrdinal("NombreCuenta")),
-                subcategory,
-                amount,
-                reader.GetString(reader.GetOrdinal("NumeroCheque")));
-
-            var label = string.IsNullOrWhiteSpace(description) ? subcategory : description;
-            var line = new ReportLine($"{type}:{category}:{subcategory}:{date:yyyyMMdd}:{label}", label, amount, 2, false, false, [detail]);
-            if (type.Equals("Ingreso", StringComparison.OrdinalIgnoreCase))
-            {
-                income.Add(line);
-            }
-            else
-            {
-                expenses.Add(line);
-            }
+                reader.GetDecimal(reader.GetOrdinal("Monto")),
+                reader.GetString(reader.GetOrdinal("NumeroCheque")),
+                reader.GetString(reader.GetOrdinal("MetodoPago"))));
         }
 
-        var totalIncome = income.Sum(l => l.Amount);
-        var totalExpenses = expenses.Sum(l => l.Amount);
+        var income = BuildDetailLines(rows, "Ingreso", nestUnderCategory: false);
+        var expenses = BuildDetailLines(rows, "Egreso", nestUnderCategory: true);
+
+        var totalIncome = rows.Where(r => r.Type.Equals("Ingreso", StringComparison.OrdinalIgnoreCase)).Sum(r => r.Amount);
+        var totalExpenses = rows.Where(r => r.Type.Equals("Egreso", StringComparison.OrdinalIgnoreCase)).Sum(r => r.Amount);
         var sections = new List<ReportSection>
         {
             new("Income", AddTotalLine(income, "Total for Income", totalIncome), totalIncome),
-            new("Expenses", AddTotalLine(expenses, "Total for Expenses", totalExpenses), totalExpenses)
+            new("Expenses", [.. expenses, new ReportLine("Total:Total for Expenses", "Total for Expenses", totalExpenses, 0, true, false, [])], totalExpenses)
         };
 
         var insights = BuildInsights(sections, totalIncome, totalExpenses);
@@ -211,6 +201,72 @@ public sealed class SqlReportRepository(SqlConnectionFactory connectionFactory, 
             insights,
             DateTime.Now);
     }
+
+    /// <summary>
+    /// Groups raw transactions by category/subcategory (matching the plain P&amp;L's grouping),
+    /// attaching each subcategory line's individual transactions — with a running balance that
+    /// resets to zero at the start of every subcategory — so the UI/print view can drill down
+    /// the same way QuickBooks' "Profit and Loss Detail" does.
+    /// </summary>
+    private static IReadOnlyList<ReportLine> BuildDetailLines(
+        IReadOnlyList<DetailTransactionRow> rows,
+        string type,
+        bool nestUnderCategory)
+    {
+        var typeRows = rows.Where(r => r.Type.Equals(type, StringComparison.OrdinalIgnoreCase)).ToList();
+        var lines = new List<ReportLine>();
+
+        IReadOnlyList<ReportLine> BuildSubcategoryLines(string category, IEnumerable<DetailTransactionRow> subRows, int level)
+        {
+            var result = new List<ReportLine>();
+            foreach (var subGroup in subRows.GroupBy(r => r.Subcategory).OrderBy(g => g.Key))
+            {
+                var ordered = subGroup.OrderBy(r => r.Date).ToList();
+                var runningBalance = 0m;
+                var details = new List<ReportDetailLine>(ordered.Count);
+                foreach (var row in ordered)
+                {
+                    runningBalance += row.Amount;
+                    var transactionType = !string.IsNullOrWhiteSpace(row.CheckNumber) ? "Cheque" : row.PaymentMethod;
+                    details.Add(new ReportDetailLine(
+                        row.Date, row.Description, row.Name, row.AccountName, row.Subcategory,
+                        row.Amount, row.CheckNumber, transactionType, runningBalance));
+                }
+
+                var subtotal = ordered.Sum(r => r.Amount);
+                result.Add(new ReportLine($"{type}:{category}:{subGroup.Key}", subGroup.Key, subtotal, level, false, false, details));
+            }
+
+            return result;
+        }
+
+        if (!nestUnderCategory)
+        {
+            return BuildSubcategoryLines(string.Empty, typeRows, 1);
+        }
+
+        foreach (var categoryGroup in typeRows.GroupBy(r => r.Category).OrderBy(g => g.Key))
+        {
+            var categoryTotal = categoryGroup.Sum(r => r.Amount);
+            lines.Add(new ReportLine($"{type}:{categoryGroup.Key}", categoryGroup.Key, categoryTotal, 1, false, false, []));
+            lines.AddRange(BuildSubcategoryLines(categoryGroup.Key, categoryGroup, 2));
+            lines.Add(new ReportLine($"Total:{categoryGroup.Key}", $"Total for {categoryGroup.Key}", categoryTotal, 1, true, false, []));
+        }
+
+        return lines;
+    }
+
+    private sealed record DetailTransactionRow(
+        string Type,
+        string Category,
+        string Subcategory,
+        DateTime Date,
+        string Description,
+        string Name,
+        string AccountName,
+        decimal Amount,
+        string CheckNumber,
+        string PaymentMethod);
 
     private static async Task<FinancialReport> GetTithesByMemberAsync(
         SqlConnection connection,
