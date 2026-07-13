@@ -85,7 +85,7 @@
                 Reportes
             </NavLink>
         }
-        @if (CanSee("presupuesto"))
+        @if (subscription is not null && subscription.IsFounderAccount && CanSee("presupuesto"))
         {
             <NavLink class="nav-link" href="presupuesto">
                 <span class="nav-icon" aria-hidden="true">◱</span>
