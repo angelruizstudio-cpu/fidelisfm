@@ -24,6 +24,30 @@ public sealed class SmtpEmailService(IConfiguration configuration, ILogger<SmtpE
         await SendAsync(toEmail, toName, subject, body, cancellationToken);
     }
 
+    public async Task SendTenantWelcomeAsync(string toEmail, string orgName, string loginUrl, CancellationToken cancellationToken = default)
+    {
+        // orgName comes from user-entered signup data — encode it so it can't inject HTML.
+        var safeOrg = WebUtility.HtmlEncode(orgName);
+        var safeEmail = WebUtility.HtmlEncode(toEmail);
+        var subject = $"Tu cuenta de Fidelis está lista — {orgName}";
+        var body = $"""
+            <p>¡Bienvenido a <strong>Fidelis Financial Management</strong>!</p>
+            <p>La cuenta de <em>{safeOrg}</em> ya está activa y lista para usarse.</p>
+            <p>Ingresa con el correo <strong>{safeEmail}</strong> y la contraseña que elegiste al registrarte:</p>
+            <p><a href="{loginUrl}" style="background:#c8a44a;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:bold;">Iniciar sesión</a></p>
+            <p><strong>Primeros pasos sugeridos:</strong></p>
+            <ol>
+                <li>Registra tu primer ingreso (diezmo u ofrenda) desde <em>Ingresos</em>.</li>
+                <li>Invita a tu tesorero o auditor desde <em>Usuarios</em>.</li>
+                <li>Revisa tus reportes financieros en <em>Reportes</em>.</li>
+            </ol>
+            <p>Si necesitas ayuda, escríbenos a soporte@fidelisfm.com.</p>
+            <br/><p>— Equipo de Fidelis Financial Management</p>
+            """;
+
+        await SendAsync(toEmail, orgName, subject, body, cancellationToken);
+    }
+
     public async Task SendPasswordResetAsync(string toEmail, string toName, string resetLink, CancellationToken cancellationToken = default)
     {
         var subject = "Restablecer contraseña — Fidelis Financial Management";

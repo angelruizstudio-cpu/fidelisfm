@@ -96,6 +96,26 @@ public sealed class StripeCheckoutService(IConfiguration configuration) : IStrip
         return new CheckoutSessionResult(session.Url, session.Id);
     }
 
+    public async Task<(string? CustomerId, string? SubscriptionId)> GetSessionStripeIdsAsync(string sessionId, CancellationToken cancellationToken = default)
+    {
+        var secretKey = configuration["STRIPE_SECRET_KEY"];
+        if (string.IsNullOrWhiteSpace(secretKey))
+        {
+            return (null, null);
+        }
+
+        try
+        {
+            var service = new SessionService(new StripeClient(secretKey));
+            var session = await service.GetAsync(sessionId, cancellationToken: cancellationToken);
+            return (session.CustomerId, session.SubscriptionId);
+        }
+        catch (StripeException)
+        {
+            return (null, null);
+        }
+    }
+
     private string ResolveAddonPriceId(string addonKey)
     {
         var configKey = addonKey switch
