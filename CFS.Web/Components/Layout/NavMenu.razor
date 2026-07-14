@@ -92,27 +92,6 @@
                 Presupuesto
             </NavLink>
         }
-        @if (HasFeature(CfsFeatures.Audit) && CanSee("auditoria"))
-        {
-            <NavLink class="nav-link" href="auditoria">
-                <span class="nav-icon" aria-hidden="true">⏱</span>
-                Auditoría
-            </NavLink>
-        }
-        @if (HasFeature(CfsFeatures.TrendAnalysis) && CanSee("tendencias"))
-        {
-            <NavLink class="nav-link" href="tendencias">
-                <span class="nav-icon" aria-hidden="true">📈</span>
-                Tendencias
-            </NavLink>
-        }
-        @if (HasFeature(CfsFeatures.Automation) && CanSee("automatizaciones"))
-        {
-            <NavLink class="nav-link" href="automatizaciones">
-                <span class="nav-icon" aria-hidden="true">⟲</span>
-                Automatizaciones
-            </NavLink>
-        }
         @if (subscription is not null && !subscription.IsFounderAccount && CanSee("plan"))
         {
             <NavLink class="nav-link" href="configuracion/plan">
@@ -120,21 +99,49 @@
                 Plan y Add-ons
             </NavLink>
         }
-        @if (isAdmin)
-        {
-            <NavLink class="nav-link" href="usuarios">
-                <span class="nav-icon" aria-hidden="true">👥</span>
-                Usuarios
-            </NavLink>
-        }
-        @if (isFounderAdmin)
-        {
-            <NavLink class="nav-link" href="admin/signups">
-                <span class="nav-icon" aria-hidden="true">⚑</span>
-                Signups
-            </NavLink>
-        }
     </div>
+
+    @if (ShowAdminCenter)
+    {
+        <div class="nav-section admin-section">
+            <span class="nav-section-label">Admin Center</span>
+            @if (HasFeature(CfsFeatures.Audit) && CanSee("auditoria"))
+            {
+                <NavLink class="nav-link" href="auditoria">
+                    <span class="nav-icon" aria-hidden="true">⏱</span>
+                    Auditoría
+                </NavLink>
+            }
+            @if (HasFeature(CfsFeatures.TrendAnalysis) && CanSee("tendencias"))
+            {
+                <NavLink class="nav-link" href="tendencias">
+                    <span class="nav-icon" aria-hidden="true">📈</span>
+                    Tendencias
+                </NavLink>
+            }
+            @if (HasFeature(CfsFeatures.Automation) && CanSee("automatizaciones"))
+            {
+                <NavLink class="nav-link" href="automatizaciones">
+                    <span class="nav-icon" aria-hidden="true">⟲</span>
+                    Automatizaciones
+                </NavLink>
+            }
+            @if (isAdmin)
+            {
+                <NavLink class="nav-link" href="usuarios">
+                    <span class="nav-icon" aria-hidden="true">👥</span>
+                    Usuarios
+                </NavLink>
+            }
+            @if (isFounderAdmin)
+            {
+                <NavLink class="nav-link" href="admin/signups">
+                    <span class="nav-icon" aria-hidden="true">⚑</span>
+                    Signups
+                </NavLink>
+            }
+        </div>
+    }
 
     <div class="nav-footer">
         <a class="nav-footer-link" href="mailto:soporte@fidelisfm.com">
@@ -181,6 +188,15 @@
 
     private bool HasFeature(string featureKey) =>
         subscription?.HasFeature(featureKey) ?? true;
+
+    // Avoids rendering an orphan "Admin Center" label when the current role
+    // (e.g. Tesorero) can't see any of the items grouped underneath it.
+    private bool ShowAdminCenter =>
+        (HasFeature(CfsFeatures.Audit) && CanSee("auditoria")) ||
+        (HasFeature(CfsFeatures.TrendAnalysis) && CanSee("tendencias")) ||
+        (HasFeature(CfsFeatures.Automation) && CanSee("automatizaciones")) ||
+        isAdmin ||
+        isFounderAdmin;
 
     // Returns true if the current user's role allows seeing this section.
     // Users with no role assigned (legacy "Finanzas" role) see all non-admin sections.
