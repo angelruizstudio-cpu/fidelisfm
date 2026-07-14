@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("CFS.Core")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+fd14769a884dca71e5de4578d945975a6c03bca9")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+4b67f608e7cb36c972913855dedd9daa935a6cec")]
 [assembly: System.Reflection.AssemblyProductAttribute("CFS.Core")]
 [assembly: System.Reflection.AssemblyTitleAttribute("CFS.Core")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
