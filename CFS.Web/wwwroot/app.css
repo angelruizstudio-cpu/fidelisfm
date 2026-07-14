@@ -980,6 +980,19 @@ a, .btn-link {
     color: #b91c1c;
 }
 
+.kpi-headline-value.kpi-neutral {
+    color: #9ca3af;
+    font-size: 1rem;
+    font-weight: 650;
+    line-height: 1.6rem;
+}
+
+.kpi-arrow {
+    display: inline-block;
+    font-weight: 900;
+    margin-right: 0.1rem;
+}
+
 .dashboard-grid {
     display: grid;
     gap: 1rem;

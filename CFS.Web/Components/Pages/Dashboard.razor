@@ -62,10 +62,19 @@ else if (snapshot is not null)
             {
                 <div class="kpi-headline">
                     <span class="kpi-headline-label">@kpi.Label</span>
-                    <span class="kpi-headline-value @(kpi.Increased ? "kpi-up" : "kpi-down")">
-                        @(kpi.Increased ? "▲" : "▼")
-                        @(kpi.ChangePercent is null ? "—" : $"{Math.Abs(kpi.ChangePercent.Value):0.0}%")
-                    </span>
+                    @if (!kpi.HasComparison)
+                    {
+                        <span class="kpi-headline-value kpi-neutral" title="El mes anterior no tiene movimientos con qué comparar.">
+                            Sin comparación
+                        </span>
+                    }
+                    else
+                    {
+                        <span class="kpi-headline-value @(kpi.IsFavorable ? "kpi-up" : "kpi-down")">
+                            <span class="kpi-arrow" aria-hidden="true">@(kpi.Increased ? "↑" : "↓")</span>
+                            @($"{Math.Abs(kpi.ChangePercent!.Value):0.0}%")
+                        </span>
+                    }
                 </div>
             }
         </div>

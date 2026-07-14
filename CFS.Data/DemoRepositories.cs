@@ -37,7 +37,7 @@ public sealed class DemoDashboardRepository : IDashboardRepository
             DemoData.Accounts.Select(a => new BankAccountBalance(a.Id, a.Name, DemoData.AccountBalances[a.Id])).ToList(),
             [
                 new KpiTrend("Ingresos", 13_074.27m, 11_893.61m),
-                new KpiTrend("Gastos", 7_420.19m, 8_677.18m),
+                new KpiTrend("Gastos", 7_420.19m, 8_677.18m, LowerIsBetter: true),
                 new KpiTrend("Diezmos", 10_728.89m, 10_018.83m),
                 new KpiTrend("Ofrendas Devocionales", 1_005.62m, 858.82m)
             ],
