@@ -40,11 +40,30 @@ public sealed class SqlSignupRepository(SqlConnectionFactory connectionFactory) 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    public async Task<int?> CompleteSignupAndProvisionTenantAsync(
+    public async Task<SignupProvisionResult?> CompleteSignupAndProvisionTenantAsync(
         string stripeSessionId,
         string? stripeCustomerId,
         string? stripeSubscriptionId,
         CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return await ProvisionAsync(stripeSessionId, stripeCustomerId, stripeSubscriptionId, cancellationToken);
+        }
+        catch
+        {
+            // Best-effort: flag the row so the failure is visible in the admin Signups view,
+            // not just buried in a log. Uses its own connection since the tx was rolled back.
+            await TryMarkFailedAsync(stripeSessionId, cancellationToken);
+            throw;
+        }
+    }
+
+    private async Task<SignupProvisionResult?> ProvisionAsync(
+        string stripeSessionId,
+        string? stripeCustomerId,
+        string? stripeSubscriptionId,
+        CancellationToken cancellationToken)
     {
         await using var connection = connectionFactory.Create();
         await connection.OpenAsync(cancellationToken);
@@ -73,6 +92,7 @@ public sealed class SqlSignupRepository(SqlConnectionFactory connectionFactory) 
                     return null;
                 }
 
+
                 pendingId = reader.GetInt32(reader.GetOrdinal("ID_PendingSignup"));
                 organizationName = reader.GetString(reader.GetOrdinal("OrganizationName"));
                 email = reader.GetString(reader.GetOrdinal("Email"));
@@ -85,7 +105,7 @@ public sealed class SqlSignupRepository(SqlConnectionFactory connectionFactory) 
             if (existingTenantId is not null)
             {
                 await transaction.CommitAsync(cancellationToken);
-                return existingTenantId;
+                return new SignupProvisionResult(existingTenantId.Value, email, organizationName, AlreadyProvisioned: true);
             }
 
             if (passwordSalt is null || passwordHash is null)
@@ -163,12 +183,33 @@ public sealed class SqlSignupRepository(SqlConnectionFactory connectionFactory) 
             }
 
             await transaction.CommitAsync(cancellationToken);
-            return tenantId;
+            return new SignupProvisionResult(tenantId, email, organizationName, AlreadyProvisioned: false);
         }
         catch
         {
             await transaction.RollbackAsync(cancellationToken);
             throw;
+        }
+    }
+
+    private async Task TryMarkFailedAsync(string stripeSessionId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using var connection = connectionFactory.Create();
+            await connection.OpenAsync(cancellationToken);
+            const string sql = """
+                UPDATE dbo.PendingSignups
+                SET Status = 'Failed'
+                WHERE StripeSessionId = @sessionId AND ProvisionedTenantId IS NULL;
+                """;
+            await using var command = new SqlCommand(sql, connection);
+            command.Parameters.Add("@sessionId", SqlDbType.NVarChar, 100).Value = stripeSessionId;
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+        catch
+        {
+            // Never let the failure-flagging itself throw over the original error.
         }
     }
 

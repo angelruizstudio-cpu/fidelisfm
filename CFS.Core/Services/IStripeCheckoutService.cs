@@ -43,4 +43,11 @@ public interface IStripeCheckoutService
     /// previous subscription once this new one is confirmed.
     /// </summary>
     Task<CheckoutSessionResult> CreateUpgradeCheckoutSessionAsync(UpgradeCheckoutRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Retrieves the Stripe customer and subscription ids for a completed Checkout Session.
+    /// Used by the admin manual-provisioning retry so a fallback provisioning still records the
+    /// Stripe linkage (which the webhook would normally supply). Returns (null, null) on failure.
+    /// </summary>
+    Task<(string? CustomerId, string? SubscriptionId)> GetSessionStripeIdsAsync(string sessionId, CancellationToken cancellationToken = default);
 }

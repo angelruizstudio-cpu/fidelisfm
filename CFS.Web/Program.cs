@@ -133,7 +133,7 @@ app.MapGet("/logout", async (HttpContext httpContext) =>
     return Results.Redirect("/login");
 }).RequireAuthorization();
 
-app.MapPost("/api/stripe/webhook", async (HttpRequest request, IConfiguration config, ISignupRepository signups, IBillingRepository billing, ILoggerFactory loggerFactory) =>
+app.MapPost("/api/stripe/webhook", async (HttpRequest request, IConfiguration config, ISignupRepository signups, IBillingRepository billing, IEmailService email, ILoggerFactory loggerFactory) =>
 {
     var logger = loggerFactory.CreateLogger("StripeWebhook");
     var json = await new StreamReader(request.Body).ReadToEndAsync();
@@ -194,10 +194,17 @@ app.MapPost("/api/stripe/webhook", async (HttpRequest request, IConfiguration co
         }
         else
         {
-            var tenantId = await signups.CompleteSignupAndProvisionTenantAsync(session.Id, session.CustomerId, session.SubscriptionId, ct);
-            if (tenantId is null)
+            var result = await signups.CompleteSignupAndProvisionTenantAsync(session.Id, session.CustomerId, session.SubscriptionId, ct);
+            if (result is null)
             {
                 logger.LogWarning("Stripe checkout.session.completed for session {SessionId} had no matching pending signup to provision.", session.Id);
+            }
+            else if (!result.AlreadyProvisioned)
+            {
+                // Fresh provisioning — welcome the new church. Never let an email failure
+                // fail the webhook (Stripe would retry and we'd double-provision-check).
+                var baseUrl = config["App:BaseUrl"]?.TrimEnd('/') ?? $"{request.Scheme}://{request.Host}";
+                await email.SendTenantWelcomeAsync(result.Email, result.OrganizationName, $"{baseUrl}/login", ct);
             }
         }
     }

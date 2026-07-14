@@ -5,7 +5,11 @@
 @using System.Security.Claims
 @using CFS.Core.Services
 @inject ISignupRepository SignupRepository
+@inject IStripeCheckoutService StripeCheckout
+@inject IEmailService EmailService
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager Nav
+@inject IConfiguration Configuration
 
 <PageTitle>Fidelis Admin · Signups</PageTitle>
 
@@ -122,10 +126,25 @@ else
 
         try
         {
-            var tenantId = await SignupRepository.CompleteSignupAndProvisionTenantAsync(stripeSessionId, null, null);
-            retryMessage = tenantId is null
-                ? "No se pudo aprovisionar (revisa que el pago haya sido registrado)."
-                : $"Aprovisionado con éxito. Tenant Id: {tenantId}.";
+            // Recover the Stripe customer/subscription ids from the session so a manual retry
+            // still records the billing linkage (otherwise later add-on/upgrade ops would break).
+            var (customerId, subscriptionId) = await StripeCheckout.GetSessionStripeIdsAsync(stripeSessionId);
+            var result = await SignupRepository.CompleteSignupAndProvisionTenantAsync(stripeSessionId, customerId, subscriptionId);
+
+            if (result is null)
+            {
+                retryMessage = "No se pudo aprovisionar (revisa que el pago haya sido registrado).";
+            }
+            else
+            {
+                if (!result.AlreadyProvisioned)
+                {
+                    var baseUrl = Configuration["App:BaseUrl"]?.TrimEnd('/') ?? Nav.BaseUri.TrimEnd('/');
+                    await EmailService.SendTenantWelcomeAsync(result.Email, result.OrganizationName, $"{baseUrl}/login");
+                }
+
+                retryMessage = $"Aprovisionado con éxito. Tenant Id: {result.TenantId}.";
+            }
         }
         catch (Exception ex)
         {
