@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<title>Fidelis Financial Management — Manual de Usuario</title>
+<style>
+  @page { size: Letter; margin: 18mm 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; line-height: 1.55;
+         font-size: 10.5pt; max-width: 100%; margin: 0; }
+  h1 { color: #182232; font-size: 20pt; border-bottom: 3px solid #c8a44a; padding-bottom: 8px; }
+  h2 { color: #182232; font-size: 15pt; margin-top: 1.6em; border-bottom: 1px solid #e5e7eb;
+        padding-bottom: 4px; page-break-after: avoid; }
+  h3 { color: #374151; font-size: 12pt; margin-top: 1.2em; page-break-after: avoid; }
+  img { max-width: 100%; height: auto; border: 1px solid #d8dee7; border-radius: 6px;
+         margin: 10px 0; page-break-inside: avoid; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 9.5pt;
+           page-break-inside: avoid; }
+  th { background: #f3f4f6; color: #374151; text-transform: uppercase; font-size: 8pt;
+        letter-spacing: 0.4px; }
+  th, td { border: 1px solid #e5e7eb; padding: 6px 9px; text-align: left; }
+  blockquote { background: #fffbeb; border-left: 4px solid #c8a44a; margin: 12px 0;
+                padding: 8px 14px; color: #713f12; page-break-inside: avoid; }
+  blockquote p { margin: 0; }
+  code { background: #f3f4f6; border-radius: 3px; padding: 1px 5px; font-size: 9pt; }
+  hr { border: 0; border-top: 1px solid #e5e7eb; margin: 24px 0; }
+  a { color: #b98216; text-decoration: none; }
+  li { margin: 3px 0; }
+  /* portada */
+  .cover { text-align: center; padding-top: 200px; page-break-after: always; }
+  .cover h1 { border: 0; font-size: 28pt; }
+  .cover p { color: #6b7280; font-size: 12pt; }
+</style></head><body>
+<div class="cover">
+  <h1>Fidelis Financial Management</h1>
+  <p><strong>Manual de Usuario</strong></p>
+  <p>Julio 2026 · Kingdom Tech Group</p>
+</div>
+<h1 id="fidelis-financial-management-manual-de-usuario">Fidelis Financial Management — Manual de Usuario</h1>
+<p><strong>Versión:</strong> Julio 2026
+<strong>Aplicación:</strong> fidelisfm.kingdomtechgroup.org</p>
+<blockquote>
+<p>Las capturas de pantalla de este manual usan datos de demostración. Los nombres, montos y cuentas que ves en tu sistema serán los de tu organización.</p>
+</blockquote>
+<hr />
+<h2 id="indice">Índice</h2>
+<ol>
+<li><a href="#1-introducción">Introducción</a></li>
+<li><a href="#2-roles-y-permisos">Roles y permisos</a></li>
+<li><a href="#3-primeros-pasos">Primeros pasos</a></li>
+<li><a href="#4-el-menú-principal">El menú principal</a></li>
+<li><a href="#5-dashboard">Dashboard</a></li>
+<li><a href="#6-ingresos">Ingresos</a></li>
+<li><a href="#7-egresos">Egresos</a></li>
+<li><a href="#8-cheques">Cheques</a></li>
+<li><a href="#9-formato-de-cheques">Formato de cheques</a></li>
+<li><a href="#10-depósitos">Depósitos</a></li>
+<li><a href="#11-conciliación-bancaria">Conciliación bancaria</a></li>
+<li><a href="#12-reportes">Reportes</a></li>
+<li><a href="#13-presupuesto">Presupuesto</a></li>
+<li><a href="#14-auditoría">Admin Center: Auditoría</a></li>
+<li><a href="#15-tendencias">Admin Center: Tendencias</a></li>
+<li><a href="#16-automatizaciones">Admin Center: Automatizaciones</a></li>
+<li><a href="#17-usuarios">Admin Center: Usuarios</a></li>
+<li><a href="#18-asistente-de-inteligencia-artificial">Asistente de Inteligencia Artificial</a></li>
+<li><a href="#19-preguntas-frecuentes">Preguntas frecuentes</a></li>
+</ol>
+<hr />
+<h2 id="1-introduccion">1. Introducción</h2>
+<p><strong>Fidelis Financial Management</strong> es el sistema de administración financiera de la iglesia. Permite registrar ingresos (diezmos, ofrendas, donaciones) y egresos, preparar depósitos bancarios, emitir e imprimir cheques, conciliar las cuentas contra el estado del banco, generar reportes financieros formales y planificar el presupuesto anual.</p>
+<p>El sistema funciona desde cualquier navegador moderno (computadora, tableta o celular). No requiere instalar nada.</p>
+<hr />
+<h2 id="2-roles-y-permisos">2. Roles y permisos</h2>
+<p>Cada usuario tiene un rol que determina qué pantallas puede ver y usar:</p>
+<table>
+<thead>
+<tr>
+<th>Pantalla</th>
+<th style="text-align: center;">Administrador</th>
+<th style="text-align: center;">Tesorero</th>
+<th style="text-align: center;">Auditor</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Dashboard</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">—</td>
+</tr>
+<tr>
+<td>Ingresos</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td>Egresos</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td>Cheques / Formato de cheques</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">—</td>
+</tr>
+<tr>
+<td>Depósitos</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">—</td>
+</tr>
+<tr>
+<td>Conciliación</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">—</td>
+</tr>
+<tr>
+<td>Reportes</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">—</td>
+</tr>
+<tr>
+<td>Presupuesto</td>
+<td style="text-align: center;">✅ (solo cuentas Founder)</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+</tr>
+<tr>
+<td>Auditoría</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td>Tendencias</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+</tr>
+<tr>
+<td>Automatizaciones</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+</tr>
+<tr>
+<td>Usuarios</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>Administrador</strong> — acceso completo, incluido el Admin Center y la creación de usuarios.</li>
+<li><strong>Tesorero</strong> — operación financiera diaria: ingresos, egresos, cheques, depósitos, conciliación y reportes.</li>
+<li><strong>Auditor</strong> — acceso de revisión: puede ver Ingresos, Egresos y el historial de Auditoría.</li>
+</ul>
+<hr />
+<h2 id="3-primeros-pasos">3. Primeros pasos</h2>
+<h3 id="31-iniciar-sesion">3.1 Iniciar sesión</h3>
+<p><img alt="Pantalla de inicio de sesión" src="img/01-login.png" /></p>
+<ol>
+<li>Abre el navegador y entra a la dirección de la aplicación.</li>
+<li>Escribe tu <strong>usuario</strong> y <strong>contraseña</strong>.</li>
+<li>Haz clic en <strong>Ingresar</strong>.</li>
+</ol>
+<h3 id="32-primera-vez-establecer-tu-contrasena">3.2 Primera vez: establecer tu contraseña</h3>
+<p>Cuando el administrador crea tu cuenta, recibirás un <strong>correo de bienvenida</strong> con un enlace para establecer tu contraseña:</p>
+<ol>
+<li>Abre el correo "Bienvenido a Fidelis Financial Management" y haz clic en <strong>Establecer contraseña</strong>.</li>
+<li>Escribe tu nueva contraseña dos veces (mínimo <strong>8 caracteres</strong>).</li>
+<li>Haz clic en <strong>Guardar contraseña</strong> y luego inicia sesión normalmente.</li>
+</ol>
+<blockquote>
+<p>El enlace del correo expira en 48 horas. Si expiró, pide al administrador que te envíe uno nuevo desde la pantalla de Usuarios.</p>
+</blockquote>
+<p>Si el administrador te entregó una <strong>contraseña temporal</strong> en lugar de un correo, el sistema te pedirá cambiarla la primera vez que inicies sesión, antes de poder usar la aplicación.</p>
+<h3 id="33-olvidaste-tu-contrasena">3.3 ¿Olvidaste tu contraseña?</h3>
+<p>Pide al administrador que te envíe un <strong>enlace de restablecimiento</strong> desde la pantalla <strong>Usuarios</strong> (botón "Enviar enlace"). El enlace llega a tu correo y es válido por 48 horas.</p>
+<h3 id="34-cerrar-sesion">3.4 Cerrar sesión</h3>
+<p>Haz clic en <strong>Salir</strong>, en la esquina superior derecha, junto a tu nombre.</p>
+<hr />
+<h2 id="4-el-menu-principal">4. El menú principal</h2>
+<p><img alt="Menú principal" src="img/03-menu.png" /></p>
+<p>El menú de la izquierda tiene tres áreas:</p>
+<ul>
+<li><strong>Botón "+ Nuevo ingreso"</strong> — acceso directo para registrar un diezmo u ofrenda.</li>
+<li><strong>Operación diaria</strong> — Dashboard, Ingresos, Egresos, Cheques, Formato de cheques, Depósitos, Conciliación, Reportes y Presupuesto.</li>
+<li><strong>ADMIN CENTER</strong> — herramientas administrativas: Auditoría, Tendencias, Automatizaciones, Usuarios y Signups. Esta sección solo aparece para los roles que tienen acceso a al menos una de sus opciones.</li>
+</ul>
+<p>En celulares el menú se muestra en la parte superior en dos columnas.</p>
+<hr />
+<h2 id="5-dashboard">5. Dashboard</h2>
+<p><img alt="Dashboard financiero" src="img/02-dashboard.png" /></p>
+<p>Es la pantalla de inicio. Muestra de un vistazo:</p>
+<ul>
+<li><strong>Ingresos YTD / Gastos YTD / Balance YTD</strong> — totales acumulados del año fiscal actual.</li>
+<li><strong>Indicadores clave</strong> — comparación porcentual del mes actual contra el mes anterior (ingresos, gastos, diezmos, ofrendas). Verde con flecha arriba = mejoró; rojo con flecha abajo = bajó.</li>
+<li><strong>Cuentas bancarias</strong> — saldo en libros de cada cuenta según lo registrado en Fidelis. <em>Este saldo puede diferir del saldo real del banco hasta que concilies.</em></li>
+<li><strong>Acciones rápidas</strong> — accesos directos a registrar ingresos, crear depósitos y revisar reportes.</li>
+</ul>
+<hr />
+<h2 id="6-ingresos">6. Ingresos</h2>
+<p><img alt="Pantalla de ingresos" src="img/04-ingresos.png" /></p>
+<p>Aquí se registran diezmos, ofrendas, donaciones y cualquier dinero que entra.</p>
+<h3 id="61-registrar-un-ingreso">6.1 Registrar un ingreso</h3>
+<p>En el panel derecho <strong>"Nuevo ingreso"</strong>:</p>
+<ol>
+<li><strong>Miembro / donante</strong> — selecciona a la persona (opcional; útil para el reporte de diezmos). Si no existe, puedes crearla desde el mismo selector.</li>
+<li><strong>Fecha</strong> — día en que se recibió el dinero.</li>
+<li><strong>Subcategoría</strong> — tipo de ingreso (Diezmos, Ofrendas, Misiones, etc.).</li>
+<li><strong>Cuenta</strong> — cuenta bancaria a la que pertenecerá.</li>
+<li><strong>Método de pago</strong> — Efectivo, Cheque, Zelle, ACH, Tarjeta o Transferencia. Si eliges <em>Cheque</em>, el <strong>número de cheque</strong> es obligatorio.</li>
+<li><strong>Monto</strong> y <strong>Descripción</strong>.</li>
+<li>Haz clic en <strong>Guardar + nuevo</strong> (para seguir registrando) o <strong>Guardar y cerrar</strong>.</li>
+</ol>
+<blockquote>
+<p><strong>Pendiente de depósito:</strong> el efectivo y los cheques quedan marcados "Pendiente depósito" hasta que los agrupes en la pantalla de <strong>Depósitos</strong>. Los métodos electrónicos (Zelle, ACH) entran directo al banco.</p>
+</blockquote>
+<h3 id="62-buscar-ingresos-anteriores">6.2 Buscar ingresos anteriores</h3>
+<p>En el panel izquierdo <strong>"Recientes"</strong>:</p>
+<ul>
+<li><strong>Caja de búsqueda</strong> — filtra por miembro, categoría o método.</li>
+<li><strong>Fechas</strong> — al cambiar cualquier fecha la lista se actualiza sola.</li>
+<li><strong>Botones rápidos</strong> — <em>Hoy</em>, <em>30 días</em>, <em>90 días</em>, <em>Este año</em>, <em>Todo</em> (todo el historial).</li>
+<li><strong>Pestañas</strong> — <em>Activos</em>, <em>Pendientes</em> (de depósito), <em>Banco</em> (ya depositados), <em>Todos</em>.</li>
+</ul>
+<h3 id="63-anular-un-ingreso">6.3 Anular un ingreso</h3>
+<p>Abre el ingreso desde la lista y usa la opción de anular, indicando el motivo. Los ingresos ya <strong>depositados o conciliados no se pueden modificar</strong> — primero habría que anular el depósito.</p>
+<hr />
+<h2 id="7-egresos">7. Egresos</h2>
+<p><img alt="Pantalla de egresos" src="img/05-egresos.png" /></p>
+<p>Registra todo el dinero que sale: pagos de servicios, compras, ayudas, etc.</p>
+<ol>
+<li>Completa <strong>fecha, subcategoría de gasto, cuenta, método de pago, monto y descripción</strong>.</li>
+<li>Si el pago fue con <strong>cheque</strong>, indica el número — así podrás generar el voucher en la pantalla de Cheques sin duplicar el gasto.</li>
+<li>Guarda. El egreso se descuenta del saldo en libros de la cuenta.</li>
+</ol>
+<p>Igual que en Ingresos, la lista de recientes permite buscar y filtrar por fechas, y los egresos pueden anularse con motivo (queda registrado en Auditoría).</p>
+<hr />
+<h2 id="8-cheques">8. Cheques</h2>
+<p><img alt="Pantalla de cheques" src="img/06-cheques.png" /></p>
+<p>Prepara e imprime cheques físicos de la iglesia.</p>
+<h3 id="81-crear-un-cheque">8.1 Crear un cheque</h3>
+<p>En el panel <strong>"Nuevo cheque"</strong>:</p>
+<ol>
+<li><strong>Egreso pendiente de cheque</strong> — si el gasto ya fue registrado en Egresos con método <em>Cheque</em>, selecciónalo aquí. Esto crea el voucher <strong>sin duplicar el gasto</strong>. También puedes elegir <em>Preparar cheque manual</em>.</li>
+<li>Completa <strong>cuenta bancaria, número de cheque, fecha, monto, beneficiario y dirección</strong> (la dirección aparece en la ventana del sobre).</li>
+<li>El <strong>memo / detalle del voucher</strong> es lo que se imprime como concepto.</li>
+<li>Abajo verás la <strong>vista previa</strong> del cheque, incluyendo el monto en letras generado automáticamente.</li>
+<li>Haz clic en <strong>Guardar borrador</strong>.</li>
+</ol>
+<h3 id="82-imprimir">8.2 Imprimir</h3>
+<ul>
+<li>El panel <strong>"Cheques para imprimir"</strong> (arriba a la izquierda) lista los borradores pendientes.</li>
+<li>Al imprimir, el cheque cambia de estado <em>Borrador</em> → <em>Impreso</em>.</li>
+<li>La lista <strong>"Cheques recientes"</strong> permite buscar por beneficiario, cuenta o número, y filtrar por estado (<em>Activos, Borrador, Impresos, Todos</em>).</li>
+<li>Un cheque también puede <strong>anularse</strong> con motivo.</li>
+</ul>
+<hr />
+<h2 id="9-formato-de-cheques">9. Formato de cheques</h2>
+<p><img alt="Formato de cheques" src="img/07-formato-cheques.png" /></p>
+<p>Aquí se calibra la posición de cada elemento (fecha, beneficiario, monto, monto en letras, memo, dirección) para que coincida exactamente con el papel de cheques pre-impreso de tu banco.</p>
+<p><strong>Consejo:</strong> imprime primero una prueba en papel normal, ponla contra un cheque real a contraluz, y ajusta los milímetros hasta que todo caiga en su lugar. Los ajustes se guardan por organización — solo hay que calibrar una vez.</p>
+<hr />
+<h2 id="10-depositos">10. Depósitos</h2>
+<p><img alt="Pantalla de depósitos" src="img/08-depositos.png" /></p>
+<p>Agrupa el efectivo y los cheques recibidos en un <strong>depósito bancario</strong>, tal como lo llevas físicamente al banco.</p>
+<h3 id="101-preparar-un-deposito">10.1 Preparar un depósito</h3>
+<ol>
+<li>En la tabla inferior aparecen los <strong>ingresos pendientes</strong> (efectivo y cheques aún no depositados). Marca con ✔ los que vas a llevar al banco, o usa <strong>Seleccionar pendientes</strong> para marcarlos todos.</li>
+<li>Elige la <strong>cuenta bancaria</strong> y la <strong>fecha del depósito</strong>.</li>
+<li>El <strong>Total esperado</strong> se calcula solo con los ingresos marcados. Escribe el <strong>Total real</strong> (lo que efectivamente vas a depositar). Ambos deben coincidir — el sistema muestra "Cuadrado" en verde cuando coinciden.</li>
+<li>Haz clic en <strong>Registrar depósito</strong>.</li>
+</ol>
+<p>El depósito suma al saldo en libros de la cuenta y los ingresos incluidos cambian de "Pendiente depósito" a "Depositado".</p>
+<h3 id="102-historial-y-anulacion">10.2 Historial y anulación</h3>
+<p>El panel <strong>"Historial reciente"</strong> (a la derecha en escritorio; <strong>primero</strong> en celular) muestra los depósitos registrados. El botón <strong>Anular</strong> libera los ingresos incluidos y resta el monto del saldo — pide un motivo que queda en Auditoría.</p>
+<hr />
+<h2 id="11-conciliacion-bancaria">11. Conciliación bancaria</h2>
+<p><img alt="Conciliación bancaria" src="img/09-conciliacion.png" /></p>
+<p>La conciliación confirma que lo registrado en Fidelis coincide con el <strong>estado de cuenta del banco</strong>. Se recomienda hacerla cada mes al recibir el estado.</p>
+<ol>
+<li>Selecciona la <strong>cuenta bancaria</strong> y la <strong>fecha final del estado</strong> de cuenta.</li>
+<li>Escribe el <strong>Statement ending balance</strong> (saldo final que muestra el estado del banco). El <em>Beginning balance</em> viene del último cierre.</li>
+<li>En las listas de <strong>Depósitos pendientes</strong> y <strong>Pagos pendientes</strong>, marca ✔ cada movimiento que aparece en el estado del banco.</li>
+<li>Observa la tarjeta <strong>DIFFERENCE</strong>: cuando llegue a <strong>$0.00</strong>, todo cuadra.</li>
+<li>Haz clic en <strong>Cerrar conciliación</strong>. El cierre queda en el historial de la derecha y los movimientos conciliados ya no pueden modificarse.</li>
+</ol>
+<blockquote>
+<p>Si la diferencia no llega a cero, revisa: cargos bancarios no registrados en Fidelis (regístralos como egreso), depósitos en tránsito, o montos digitados distintos a los del banco.</p>
+</blockquote>
+<hr />
+<h2 id="12-reportes">12. Reportes</h2>
+<p><img alt="Pantalla de reportes" src="img/10-reportes.png" /></p>
+<p>Reportes financieros formales, listos para imprimir o guardar como PDF.</p>
+<h3 id="121-reportes-disponibles">12.1 Reportes disponibles</h3>
+<ul>
+<li><strong>Profit and Loss</strong> — resumen de ingresos y gastos por categoría, con Gross Profit, Net Operating Income y Net Income.</li>
+<li><strong>Profit and Loss Detail</strong> — igual que el anterior, pero cada subcategoría se puede <strong>expandir</strong> para ver las transacciones individuales.</li>
+<li><strong>Diezmos (Miembros que diezman)</strong> — miembros con diezmos registrados en el periodo.</li>
+</ul>
+<h3 id="122-filtros">12.2 Filtros</h3>
+<ul>
+<li><strong>Report</strong> — cuál reporte generar.</li>
+<li><strong>Cuenta bancaria</strong> — una cuenta específica o <em>Todas las cuentas</em>.</li>
+<li><strong>Report period</strong> — This month, Last month, This year, o fechas personalizadas (From/To).</li>
+<li>Haz clic en <strong>Run report</strong>.</li>
+</ul>
+<h3 id="123-profit-and-loss-detail-ver-las-transacciones">12.3 Profit and Loss Detail: ver las transacciones</h3>
+<p><img alt="P&amp;L Detail expandido" src="img/11-reportes-detail.png" /></p>
+<p>En el reporte Detail, cada subcategoría muestra una flecha <strong>▸</strong>. Haz clic sobre la línea para expandirla: verás cada transacción con <strong>Fecha, Tipo, Número, Nombre, Descripción, Cuenta, Monto y Saldo</strong> (acumulado dentro de la subcategoría). Vuelve a hacer clic para colapsar.</p>
+<h3 id="124-imprimir-o-guardar-pdf">12.4 Imprimir o guardar PDF</h3>
+<p>Usa los íconos de <strong>imprimir/descargar</strong> en la barra del reporte. Se abre la vista formal con encabezado de la organización, líneas de firma (Pastor y Tesorería) y pie de página. En el diálogo de impresión del navegador elige <strong>Guardar como PDF</strong> si lo quieres en archivo. En el reporte Detail, la versión impresa incluye <strong>todas las transacciones expandidas</strong> automáticamente.</p>
+<h3 id="125-insights">12.5 Insights</h3>
+<p>El panel derecho muestra <strong>insights automáticos</strong>: los totales del periodo, las partidas de mayor peso y advertencias (por ejemplo, si los gastos superan el 85% de los ingresos).</p>
+<hr />
+<h2 id="13-presupuesto">13. Presupuesto</h2>
+<p><img alt="Pantalla de presupuesto" src="img/12-presupuesto.png" /></p>
+<p><em>Disponible solo para cuentas Founder, con rol Administrador o Tesorero.</em></p>
+<p>Planifica cuánto esperas recibir y gastar por categoría durante el año, y compáralo contra lo real.</p>
+<h3 id="131-configurar-el-presupuesto-anual">13.1 Configurar el presupuesto anual</h3>
+<ol>
+<li>Elige el <strong>Año</strong>.</li>
+<li>En la columna <strong>Presupuesto anual</strong>, escribe el monto que planeas para cada categoría de ingreso y de gasto.</li>
+<li>Haz clic en <strong>Guardar presupuesto</strong>.</li>
+</ol>
+<h3 id="132-leer-la-comparacion">13.2 Leer la comparación</h3>
+<ul>
+<li><strong>Ver hasta</strong> — selecciona el mes: el sistema prorratea la meta (anual ÷ 12 × meses transcurridos) y suma lo real de enero hasta ese mes.</li>
+<li><strong>Meta a la fecha</strong> — lo que "deberías" llevar a ese punto del año.</li>
+<li><strong>Real</strong> — lo efectivamente registrado en las transacciones.</li>
+<li><strong>Diferencia</strong> — verde es favorable (gasto por debajo del plan, o ingreso por encima); rojo es desfavorable.</li>
+<li><strong>Barra de avance</strong> — porcentaje del presupuesto anual consumido: verde = en línea, ámbar = ligeramente desviado, rojo = desviación mayor al 15%.</li>
+</ul>
+<p>Las tarjetas superiores resumen ingresos, gastos y neto real acumulado.</p>
+<hr />
+<h2 id="14-auditoria">14. Auditoría</h2>
+<p><img alt="Pantalla de auditoría" src="img/13-auditoria.png" /></p>
+<p><em>Admin Center — roles Administrador y Auditor.</em></p>
+<p>Registro cronológico de <strong>quién hizo qué y cuándo</strong>: creaciones, ediciones, anulaciones, impresiones de cheques, ejecuciones de automatizaciones y cambios de presupuesto.</p>
+<ul>
+<li>Cada evento muestra un <strong>ícono y etiqueta de color</strong> según la acción: verde = crear, azul = editar, rojo = anular, naranja = ejecutar, gris = imprimir.</li>
+<li><strong>Buscador</strong> — filtra por usuario, módulo, referencia o texto del detalle.</li>
+<li><strong>Filtro de acciones</strong> — muestra solo un tipo de acción (ej. solo ANULAR).</li>
+</ul>
+<p>Este historial no se puede editar ni borrar desde la aplicación — es el rastro de control interno de la iglesia.</p>
+<hr />
+<h2 id="15-tendencias">15. Tendencias</h2>
+<p><img alt="Pantalla de tendencias" src="img/14-tendencias.png" /></p>
+<p><em>Admin Center — rol Administrador.</em></p>
+<p>Gráfica de la evolución mensual de <strong>ingresos (verde), gastos (rojo) y neto (azul punteado)</strong>.</p>
+<ul>
+<li><strong>Tarjetas superiores</strong> — totales de ingresos, gastos y neto acumulado del rango elegido.</li>
+<li><strong>Rango</strong> — 6, 12 o 24 meses.</li>
+<li><strong>Casillas Ingresos/Gastos/Neto</strong> — muestra u oculta cada línea.</li>
+<li><strong>Pasa el cursor</strong> sobre un mes para ver los valores exactos en un tooltip.</li>
+<li>La tabla <strong>Detalle mensual</strong> muestra los números mes a mes, con el neto en verde o rojo según el signo.</li>
+</ul>
+<hr />
+<h2 id="16-automatizaciones">16. Automatizaciones</h2>
+<p><img alt="Pantalla de automatizaciones" src="img/15-automatizaciones.png" /></p>
+<p><em>Admin Center — rol Administrador.</em></p>
+<p>Crea <strong>transacciones recurrentes</strong> que se generan solas: renta mensual, servicios, diezmos comprometidos, etc.</p>
+<ol>
+<li>Define <strong>nombre, tipo (Ingreso/Egreso), cuenta, subcategoría, monto, frecuencia</strong> (Semanal, Quincenal o Mensual) y la <strong>próxima fecha de ejecución</strong>.</li>
+<li>Haz clic en <strong>Guardar regla</strong>.</li>
+<li>El botón <strong>Ejecutar ahora</strong> procesa todas las reglas vencidas: crea la transacción real y avanza la fecha a la siguiente ocurrencia.</li>
+<li>Cada regla puede <strong>pausarse</strong> o <strong>eliminarse</strong> desde la tabla.</li>
+</ol>
+<p>Cada ejecución queda registrada en Auditoría.</p>
+<hr />
+<h2 id="17-usuarios">17. Usuarios</h2>
+<p><img alt="Pantalla de usuarios" src="img/16-usuarios.png" /></p>
+<p><em>Admin Center — solo rol Administrador.</em></p>
+<p>Administra quién tiene acceso al sistema.</p>
+<h3 id="171-crear-un-usuario">17.1 Crear un usuario</h3>
+<p><img alt="Formulario de nuevo usuario" src="img/17-usuarios-nuevo.png" /></p>
+<ol>
+<li>Haz clic en <strong>+ Nuevo usuario</strong>.</li>
+<li>Completa <strong>nombre, apellido, usuario, correo electrónico</strong> y elige el <strong>rol</strong> (Administrador, Tesorero o Auditor — ver <a href="#2-roles-y-permisos">sección 2</a>).</li>
+<li>Haz clic en <strong>Crear usuario</strong>.</li>
+<li>Si escribiste un correo, la persona recibe automáticamente el <strong>correo de bienvenida</strong> con el enlace para establecer su contraseña (válido 48 horas).</li>
+</ol>
+<h3 id="172-administrar-usuarios-existentes">17.2 Administrar usuarios existentes</h3>
+<p>Cada tarjeta de usuario muestra su avatar (color según rol), nombre, usuario, correo, roles y estado, con tres acciones:</p>
+<ul>
+<li><strong>Desactivar / Activar</strong> — un usuario desactivado no puede iniciar sesión (sus registros históricos se conservan). Es la opción recomendada cuando alguien deja de servir en el área.</li>
+<li><strong>Enviar enlace</strong> — envía al correo del usuario un enlace para restablecer su contraseña.</li>
+<li><strong>Eliminar</strong> — borra el usuario permanentemente (pide confirmación). Prefiere <em>Desactivar</em> salvo que la cuenta se haya creado por error.</li>
+</ul>
+<blockquote>
+<p>No puedes desactivarte ni eliminarte a ti mismo — tu propia tarjeta muestra "(tú)".</p>
+</blockquote>
+<hr />
+<h2 id="18-asistente-de-inteligencia-artificial">18. Asistente de Inteligencia Artificial</h2>
+<p>En cualquier pantalla verás el botón dorado <strong>✦ AI</strong> en la esquina inferior derecha. Ábrelo para hacer preguntas en lenguaje natural sobre las finanzas:</p>
+<ul>
+<li><em>"¿Cuál es el balance en libros por cuenta?"</em></li>
+<li><em>"Resume el Profit and Loss de este año"</em></li>
+<li><em>"¿Qué gastos debo revisar primero?"</em></li>
+</ul>
+<p>El asistente responde usando <strong>solo los datos reales de Fidelis</strong> (saldos, reporte P&amp;L e insights del periodo) y distingue siempre entre saldo en libros y saldo real del banco. Cada plan tiene un límite mensual de preguntas.</p>
+<hr />
+<h2 id="19-preguntas-frecuentes">19. Preguntas frecuentes</h2>
+<p><strong>El saldo del Dashboard no coincide con el banco.</strong>
+Es normal: el Dashboard muestra el saldo <em>en libros</em> (lo registrado en Fidelis). Puede haber cheques emitidos que el banco aún no cobra, o depósitos en tránsito. La pantalla de <strong>Conciliación</strong> es donde se cuadran ambos.</p>
+<p><strong>Registré un ingreso en efectivo y no aparece en el saldo del banco.</strong>
+El efectivo y los cheques quedan "Pendiente de depósito" hasta que los agrupes y registres en <strong>Depósitos</strong>. Ahí es cuando suman al saldo de la cuenta.</p>
+<p><strong>No puedo editar un ingreso.</strong>
+Los ingresos ya <strong>depositados o conciliados</strong> están protegidos. Si necesitas corregirlo, primero anula el depósito (Depósitos → Historial → Anular), corrige, y vuelve a preparar el depósito.</p>
+<p><strong>No veo alguna pantalla del menú.</strong>
+El menú se filtra por tu rol (ver <a href="#2-roles-y-permisos">sección 2</a>). Si necesitas acceso adicional, pide al Administrador que revise tu rol en <strong>Usuarios</strong>.</p>
+<p><strong>El enlace de mi correo de bienvenida expiró.</strong>
+Pide al Administrador que use <strong>Enviar enlace</strong> en tu tarjeta de la pantalla Usuarios — recibirás un enlace nuevo.</p>
+<p><strong>¿Cómo saco un reporte para la reunión administrativa?</strong>
+Reportes → elige <em>Profit and Loss</em> → periodo (ej. <em>This year</em>) → <strong>Run report</strong> → ícono de imprimir → Guardar como PDF. La versión impresa incluye las líneas de firma del Pastor y Tesorería.</p>
+<p><strong>Necesito ayuda adicional.</strong>
+Usa el enlace <strong>Soporte</strong> al pie del menú (soporte@fidelisfm.com).</p>
+</body></html>
