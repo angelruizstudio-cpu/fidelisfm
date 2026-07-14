@@ -254,8 +254,6 @@ C:/Users/aruiz/Documents/Codex/2026-05-08/files-mentioned-by-the-user-finanzasig
 /home/user/fidelisfm/CFS.Web/obj/Debug/net10.0/compressed/ab27xqgzfk-{0}-cyz5k529gx-cyz5k529gx.gz
 /home/user/fidelisfm/CFS.Web/obj/Debug/net10.0/compressed/4ogh1a0kru-{0}-ne14ti1q68-ne14ti1q68.gz
 /home/user/fidelisfm/CFS.Web/obj/Debug/net10.0/compressed/3oev2y4gxg-{0}-ig5xotzpx5-ig5xotzpx5.gz
-/home/user/fidelisfm/CFS.Web/obj/Debug/net10.0/compressed/s8yprs28ip-{0}-vl5s4dvf0k-vl5s4dvf0k.gz
-/home/user/fidelisfm/CFS.Web/obj/Debug/net10.0/compressed/xn5t8upr9x-{0}-vl5s4dvf0k-vl5s4dvf0k.gz
 /home/user/fidelisfm/CFS.Web/obj/Debug/net10.0/staticwebassets.build.json
 /home/user/fidelisfm/CFS.Web/obj/Debug/net10.0/staticwebassets.build.json.cache
 /home/user/fidelisfm/CFS.Web/obj/Debug/net10.0/staticwebassets.development.json
@@ -264,4 +262,6 @@ C:/Users/aruiz/Documents/Codex/2026-05-08/files-mentioned-by-the-user-finanzasig
 /home/user/fidelisfm/CFS.Web/obj/Debug/net10.0/CFS.Web.csproj.Up2Date
 /home/user/fidelisfm/CFS.Web/obj/Debug/net10.0/CFS.Web.genruntimeconfig.cache
 /home/user/fidelisfm/CFS.Web/obj/Debug/net10.0/ref/CFS.Web.dll
-/home/user/fidelisfm/CFS.Web/obj/Debug/net10.0/compressed/k9t0nfzeud-{0}-nul5gn211d-nul5gn211d.gz
+/home/user/fidelisfm/CFS.Web/obj/Debug/net10.0/compressed/k9t0nfzeud-{0}-68btb3tqv9-68btb3tqv9.gz
+/home/user/fidelisfm/CFS.Web/obj/Debug/net10.0/compressed/s8yprs28ip-{0}-jnb6yjlbpi-jnb6yjlbpi.gz
+/home/user/fidelisfm/CFS.Web/obj/Debug/net10.0/compressed/xn5t8upr9x-{0}-jnb6yjlbpi-jnb6yjlbpi.gz

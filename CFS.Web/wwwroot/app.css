@@ -4376,3 +4376,307 @@ h1:focus {
     text-align: right;
     font-variant-numeric: tabular-nums;
 }
+
+/* ── Generic styled data table (real <table>, not the report-table grid) ── */
+.data-table {
+    background: #fff;
+    border: 1px solid #e3e7ee;
+    border-collapse: collapse;
+    border-radius: 10px;
+    overflow: hidden;
+    width: 100%;
+}
+
+.data-table thead {
+    background: #f8fafc;
+}
+
+.data-table th {
+    color: #64748b;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.4px;
+    padding: 0.65rem 0.9rem;
+    text-align: left;
+    text-transform: uppercase;
+}
+
+.data-table th.num,
+.data-table td.num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.data-table td {
+    border-top: 1px solid #edf1f5;
+    color: #1f2937;
+    font-size: 0.88rem;
+    padding: 0.6rem 0.9rem;
+}
+
+.data-table tbody tr:hover {
+    background: #fafbfc;
+}
+
+/* ── Auditoría ─────────────────────────────────────────── */
+.aud-toolbar {
+    display: flex;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+}
+
+.aud-search-box {
+    position: relative;
+    flex: 1 1 280px;
+}
+
+.aud-search-icon {
+    position: absolute;
+    left: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #9ca3af;
+}
+
+.aud-search {
+    border: 1px solid #d8dee7;
+    border-radius: 8px;
+    font-size: 0.88rem;
+    padding: 0.5rem 0.75rem 0.5rem 2.1rem;
+    width: 100%;
+}
+
+.aud-search:focus {
+    outline: none;
+    border-color: #c8a44a;
+    box-shadow: 0 0 0 3px rgba(200, 164, 74, 0.15);
+}
+
+.aud-filter {
+    max-width: 220px;
+}
+
+.aud-empty {
+    background: #fff;
+    border: 1px solid #e3e7ee;
+    border-radius: 10px;
+    padding: 3rem 1rem;
+    text-align: center;
+    color: #9ca3af;
+}
+
+.aud-empty-icon {
+    display: block;
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+}
+
+.aud-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.aud-row {
+    align-items: flex-start;
+    background: #fff;
+    border: 1px solid #e3e7ee;
+    border-radius: 10px;
+    display: grid;
+    gap: 0.85rem;
+    grid-template-columns: 40px minmax(0, 1fr) auto;
+    padding: 0.75rem 0.9rem;
+    transition: box-shadow 0.12s, border-color 0.12s;
+}
+
+.aud-row:hover {
+    border-color: #d1d5db;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+}
+
+.aud-icon {
+    align-items: center;
+    border-radius: 50%;
+    display: flex;
+    font-size: 1rem;
+    font-weight: 700;
+    height: 40px;
+    justify-content: center;
+    width: 40px;
+}
+
+.aud-icon--create  { background: #ecfdf3; color: #15803d; }
+.aud-icon--edit    { background: #eff6ff; color: #1d4ed8; }
+.aud-icon--delete  { background: #fef2f2; color: #dc2626; }
+.aud-icon--run     { background: #fff7ed; color: #c2410c; }
+.aud-icon--print   { background: #f3f4f6; color: #4b5563; }
+.aud-icon--neutral { background: #f3f4f6; color: #4b5563; }
+
+.aud-main {
+    min-width: 0;
+}
+
+.aud-line1 {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    margin-bottom: 0.25rem;
+}
+
+.aud-badge {
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.3px;
+    padding: 0.12rem 0.55rem;
+    text-transform: uppercase;
+}
+
+.aud-badge--create  { background: #ecfdf3; color: #15803d; }
+.aud-badge--edit    { background: #eff6ff; color: #1d4ed8; }
+.aud-badge--delete  { background: #fef2f2; color: #dc2626; }
+.aud-badge--run     { background: #fff7ed; color: #c2410c; }
+.aud-badge--print   { background: #f3f4f6; color: #4b5563; }
+.aud-badge--neutral { background: #f3f4f6; color: #4b5563; }
+
+.aud-module {
+    color: #374151;
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.aud-ref {
+    color: #9ca3af;
+    font-size: 0.78rem;
+}
+
+.aud-detail {
+    color: #4b5563;
+    font-size: 0.85rem;
+    line-height: 1.4;
+    word-break: break-word;
+}
+
+.aud-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.15rem;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.aud-user {
+    color: #182232;
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.aud-date {
+    color: #9ca3af;
+    font-size: 0.76rem;
+}
+
+@media (max-width: 640px) {
+    .aud-row {
+        grid-template-columns: 32px minmax(0, 1fr);
+    }
+
+    .aud-icon {
+        height: 32px;
+        width: 32px;
+        font-size: 0.85rem;
+    }
+
+    .aud-meta {
+        align-items: flex-start;
+        grid-column: 1 / -1;
+        text-align: left;
+        flex-direction: row;
+        gap: 0.6rem;
+        margin-left: 2.6rem;
+    }
+}
+
+/* ── Tendencias: summary cards, chip toolbar, table ──────── */
+.trend-summary-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.85rem;
+    margin-bottom: 1rem;
+}
+
+.trend-card {
+    background: #fff;
+    border: 1px solid #e3e7ee;
+    border-left: 4px solid #9ca3af;
+    border-radius: 10px;
+    padding: 0.85rem 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.trend-card--income   { border-left-color: #2f9e44; }
+.trend-card--expenses { border-left-color: #e03131; }
+.trend-card--net      { border-left-color: #1c7ed6; }
+
+.trend-card-label {
+    color: #6b7280;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+}
+
+.trend-card-value {
+    color: #182232;
+    font-size: 1.35rem;
+    font-weight: 800;
+}
+
+.trend-range-chip {
+    background: #fff;
+    border: 1px solid #d8dee7;
+    border-radius: 999px;
+    color: #374151;
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 650;
+    padding: 0.35rem 0.9rem;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.trend-range-chip:hover {
+    background: #fff8e8;
+    border-color: #e0c688;
+}
+
+.trend-range-chip.active {
+    background: #182232;
+    border-color: #182232;
+    color: #fff;
+}
+
+.trend-table-wrapper {
+    margin-top: 0.25rem;
+}
+
+.trend-table-title {
+    color: #182232;
+    font-size: 1rem;
+    font-weight: 750;
+    margin: 0 0 0.6rem;
+}
+
+.trend-net-positive {
+    color: #15803d;
+    font-weight: 700;
+}
+
+.trend-net-negative {
+    color: #dc2626;
+    font-weight: 700;
+}

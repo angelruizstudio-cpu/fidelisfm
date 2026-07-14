@@ -40,11 +40,26 @@ else if (points.Count == 0)
 }
 else
 {
+    <div class="trend-summary-cards">
+        <div class="trend-card trend-card--income">
+            <span class="trend-card-label">Ingresos (@monthsToShow meses)</span>
+            <span class="trend-card-value">@Money(points.Sum(p => p.Income))</span>
+        </div>
+        <div class="trend-card trend-card--expenses">
+            <span class="trend-card-label">Gastos (@monthsToShow meses)</span>
+            <span class="trend-card-value">@Money(points.Sum(p => p.Expenses))</span>
+        </div>
+        <div class="trend-card trend-card--net">
+            <span class="trend-card-label">Neto acumulado</span>
+            <span class="trend-card-value">@Money(points.Sum(p => p.Income - p.Expenses))</span>
+        </div>
+    </div>
+
     <section class="trend-toolbar">
         <div class="trend-range-group">
             @foreach (var option in monthOptions)
             {
-                <button class="btn btn-sm @(monthsToShow == option ? "btn-primary" : "btn-outline-secondary")"
+                <button class="trend-range-chip @(monthsToShow == option ? "active" : "")"
                         @onclick="() => ChangeRangeAsync(option)">
                     @option meses
                 </button>
@@ -114,9 +129,12 @@ else
                 <rect x="@(x - HitWidth / 2)" y="0" width="@HitWidth" height="@ChartHeight" class="trend-hit-area"
                       @onmouseover="() => hoveredIndex = index" @onmouseout="() => hoveredIndex = null" />
 
-                <g class="trend-axis-label" transform="translate(@(x.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)), @(ChartHeight - 6))">
-                    <text>@points[index].MonthLabel</text>
-                </g>
+                @if (index % LabelStep == 0)
+                {
+                    <g class="trend-axis-label" transform="translate(@(x.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)), @(ChartHeight - 6))">
+                        <text>@points[index].MonthLabel</text>
+                    </g>
+                }
             }
         </svg>
 
@@ -141,24 +159,26 @@ else
         }
     </section>
 
-    <section class="report-table-wrapper">
-        <table class="report-table">
+    <section class="trend-table-wrapper">
+        <h2 class="trend-table-title">Detalle mensual</h2>
+        <table class="data-table">
             <thead>
                 <tr>
                     <th>Mes</th>
-                    <th>Ingresos</th>
-                    <th>Gastos</th>
-                    <th>Neto</th>
+                    <th class="num">Ingresos</th>
+                    <th class="num">Gastos</th>
+                    <th class="num">Neto</th>
                 </tr>
             </thead>
             <tbody>
                 @foreach (var point in points)
                 {
+                    var net = point.Income - point.Expenses;
                     <tr>
                         <td>@point.MonthLabel</td>
-                        <td>@Money(point.Income)</td>
-                        <td>@Money(point.Expenses)</td>
-                        <td>@Money(point.Income - point.Expenses)</td>
+                        <td class="num">@Money(point.Income)</td>
+                        <td class="num">@Money(point.Expenses)</td>
+                        <td class="num @(net >= 0 ? "trend-net-positive" : "trend-net-negative")">@Money(net)</td>
                     </tr>
                 }
             </tbody>
@@ -272,6 +292,14 @@ else
     }
 
     private double TooltipLeftPercent(int index) => XForIndex(index) / ChartWidth * 100;
+
+    // Thins out axis labels as the range grows so they don't overlap (e.g. 24 months).
+    private int LabelStep => points.Count switch
+    {
+        <= 12 => 1,
+        <= 18 => 2,
+        _ => 3
+    };
 
     private static string Money(decimal value) => value.ToString("C2");
 }
