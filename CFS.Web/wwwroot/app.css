@@ -2094,6 +2094,19 @@ h1:focus {
     .deposit-workspace {
         grid-template-columns: 1fr;
     }
+
+    /* On narrow screens the two panels stack; show recent history first so
+       it doesn't require scrolling past the whole "Preparar depósito" form
+       and pending-items table to reach it. */
+    .deposit-history {
+        order: -1;
+        margin-bottom: 1rem;
+    }
+
+    .deposit-history-list {
+        max-height: 45vh;
+        overflow-y: auto;
+    }
 }
 
 .reconcile-workspace {
