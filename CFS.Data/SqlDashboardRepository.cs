@@ -127,7 +127,7 @@ public sealed class SqlDashboardRepository(SqlConnectionFactory connectionFactor
         return
         [
             new KpiTrend("Ingresos", incomeCurrent, incomePrevious),
-            new KpiTrend("Gastos", expensesCurrent, expensesPrevious),
+            new KpiTrend("Gastos", expensesCurrent, expensesPrevious, LowerIsBetter: true),
             new KpiTrend("Diezmos", tithesCurrent, tithesPrevious),
             new KpiTrend("Ofrendas Devocionales", devotionalCurrent, devotionalPrevious)
         ];
