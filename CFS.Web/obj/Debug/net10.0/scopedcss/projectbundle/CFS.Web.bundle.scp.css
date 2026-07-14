@@ -1,11 +1,11 @@
 /* /Components/Layout/MainLayout.razor.rz.scp.css */
-.app-shell[b-9432jglrou] {
+.app-shell[b-dhxqq74f2u] {
     background: #f3f5f7;
     display: flex;
     min-height: 100vh;
 }
 
-.sidebar[b-9432jglrou] {
+.sidebar[b-dhxqq74f2u] {
     background: #ffffff;
     border-right: 1px solid #d8dee7;
     flex: 0 0 248px;
@@ -14,14 +14,14 @@
     top: 0;
 }
 
-.workspace[b-9432jglrou] {
+.workspace[b-dhxqq74f2u] {
     display: flex;
     flex: 1;
     flex-direction: column;
     min-width: 0;
 }
 
-.command-bar[b-9432jglrou] {
+.command-bar[b-dhxqq74f2u] {
     align-items: center;
     background: #ffffff;
     border-bottom: 1px solid #d8dee7;
@@ -34,7 +34,7 @@
     z-index: 10;
 }
 
-.search-box[b-9432jglrou] {
+.search-box[b-dhxqq74f2u] {
     align-items: center;
     background: #f6f8fa;
     border: 1px solid #cfd7df;
@@ -46,13 +46,13 @@
     padding: 0.35rem 0.8rem;
 }
 
-.search-box span[b-9432jglrou] {
+.search-box span[b-dhxqq74f2u] {
     color: #5f6b7a;
     font-size: 1.15rem;
     line-height: 1;
 }
 
-.search-box input[b-9432jglrou] {
+.search-box input[b-dhxqq74f2u] {
     background: transparent;
     border: 0;
     color: #1f2937;
@@ -61,7 +61,7 @@
     width: 100%;
 }
 
-.user-area[b-9432jglrou] {
+.user-area[b-dhxqq74f2u] {
     align-items: center;
     color: #374151;
     display: flex;
@@ -70,17 +70,17 @@
     white-space: nowrap;
 }
 
-.logout-link[b-9432jglrou] {
+.logout-link[b-dhxqq74f2u] {
     color: #8a5a08;
     font-weight: 700;
     text-decoration: none;
 }
 
-.logout-link:hover[b-9432jglrou] {
+.logout-link:hover[b-dhxqq74f2u] {
     text-decoration: underline;
 }
 
-.environment-badge[b-9432jglrou] {
+.environment-badge[b-dhxqq74f2u] {
     background: #fff3cd;
     border: 1px solid #e0b94f;
     border-radius: 999px;
@@ -93,7 +93,7 @@
     white-space: nowrap;
 }
 
-.content[b-9432jglrou] {
+.content[b-dhxqq74f2u] {
     margin: 0;
     max-width: none;
     padding: 1.25rem 2rem;
@@ -101,31 +101,31 @@
 }
 
 @media (max-width: 800px) {
-    .app-shell[b-9432jglrou] {
+    .app-shell[b-dhxqq74f2u] {
         flex-direction: column;
     }
 
-    .sidebar[b-9432jglrou] {
+    .sidebar[b-dhxqq74f2u] {
         min-height: auto;
         position: static;
     }
 
-    .command-bar[b-9432jglrou] {
+    .command-bar[b-dhxqq74f2u] {
         align-items: stretch;
         flex-direction: column;
     }
 
-    .search-box[b-9432jglrou] {
+    .search-box[b-dhxqq74f2u] {
         max-width: none;
         width: 100%;
     }
 
-    .user-area[b-9432jglrou] {
+    .user-area[b-dhxqq74f2u] {
         margin-left: 0;
     }
 }
 
-#blazor-error-ui[b-9432jglrou] {
+#blazor-error-ui[b-dhxqq74f2u] {
     color-scheme: light only;
     background: #fff8d8;
     bottom: 0;
@@ -139,7 +139,7 @@
     z-index: 1000;
 }
 
-#blazor-error-ui .dismiss[b-9432jglrou] {
+#blazor-error-ui .dismiss[b-dhxqq74f2u] {
     cursor: pointer;
     position: absolute;
     right: 0.75rem;
