@@ -16,7 +16,7 @@ public sealed class SqlAutomationRepository(SqlConnectionFactory connectionFacto
 
         var accounts = await LoadOptionsAsync(
             connection,
-            "SELECT ID_Cuenta, NombreCuenta FROM dbo.CuentasBancarias WHERE ID_Tenant_FK = @tenantId ORDER BY NombreCuenta;",
+            "SELECT ID_Cuenta, NombreCuenta FROM dbo.CuentasBancarias WHERE NombreCuenta NOT LIKE '%(OLD-ID-%' AND ID_Tenant_FK = @tenantId ORDER BY NombreCuenta;",
             cancellationToken);
 
         var incomeSubcategories = await LoadOptionsAsync(

@@ -16,7 +16,7 @@ public sealed class SqlDepositRepository(SqlConnectionFactory connectionFactory,
 
         var accounts = new List<LookupOption>();
         await using var command = new SqlCommand(
-            "SELECT ID_Cuenta, NombreCuenta FROM dbo.CuentasBancarias WHERE ID_Tenant_FK = @tenantId ORDER BY NombreCuenta;",
+            "SELECT ID_Cuenta, NombreCuenta FROM dbo.CuentasBancarias WHERE NombreCuenta NOT LIKE '%(OLD-ID-%' AND ID_Tenant_FK = @tenantId ORDER BY NombreCuenta;",
             connection);
         command.Parameters.AddWithValue("@tenantId", _tenantId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
