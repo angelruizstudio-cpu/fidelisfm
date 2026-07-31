@@ -765,13 +765,18 @@ else
 
     private async Task VoidAsync()
     {
-        var result = await IncomeRepository.VoidAsync(entry.Id, voidReason, await GetCurrentUserNameAsync());
+        var voidedId = entry.Id;
+        var result = await IncomeRepository.VoidAsync(voidedId, voidReason, await GetCurrentUserNameAsync());
         if (!result.Saved)
         {
             SetStatus(result.ErrorMessage ?? "No se pudo anular el ingreso.", "alert-danger");
             showVoidDialog = false;
             return;
         }
+
+        // Drop the voided receipt from the in-session deposit list so the "Guardar y cerrar"
+        // dialog doesn't keep offering an anulled transaction for deposit.
+        sessionDepositTransactions.RemoveAll(t => t.Id == voidedId);
 
         showVoidDialog = false;
         SetStatus("Ingreso anulado correctamente.", "alert-success");
