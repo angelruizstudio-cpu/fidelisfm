@@ -100,7 +100,7 @@
                 Mensual
             </button>
             <button type="button" class="@(billingCycle == BillingCycle.Annual ? "active" : "")" @onclick="() => SetBillingCycle(BillingCycle.Annual)">
-                Anual <span class="discount-pill">-10%</span>
+                Anual <span class="discount-pill">1 mes gratis</span>
             </button>
         </div>
 
@@ -355,7 +355,8 @@
     private bool isRedirectingToStripe;
     private string? checkoutError;
 
-    private static readonly decimal AnnualDiscount = 1m / 6m;
+    // Annual billing gives one month free: pay for 11 of 12 months.
+    private static readonly decimal AnnualDiscount = 1m / 12m;
 
     private void SetBillingCycle(BillingCycle cycle) => billingCycle = cycle;
 
