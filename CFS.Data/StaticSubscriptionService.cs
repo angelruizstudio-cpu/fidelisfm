@@ -66,7 +66,6 @@ public sealed class StaticSubscriptionService : ISubscriptionService
             CfsFeatures.AiAssistantBasic,
             CfsFeatures.Audit,
             CfsFeatures.TrendAnalysis,
-            CfsFeatures.Automation,
             CfsFeatures.CheckApprovals,
             CfsFeatures.Documents
         ],
@@ -87,7 +86,6 @@ public sealed class StaticSubscriptionService : ISubscriptionService
             CfsFeatures.AiAnomalyDetection,
             CfsFeatures.Audit,
             CfsFeatures.TrendAnalysis,
-            CfsFeatures.Automation,
             CfsFeatures.CheckApprovals,
             CfsFeatures.Documents,
             CfsFeatures.MultiChurch
