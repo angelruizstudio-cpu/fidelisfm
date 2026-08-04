@@ -46,6 +46,18 @@ public static class CfsPlans
     public const string Standard = "standard";
     public const string Pro = "pro";
     public const string MultiChurch = "multi_church";
+
+    /// <summary>
+    /// Maximum number of users a tenant may have, by plan: Básico 1, Standard 3, Pro 5.
+    /// Founder and Multi-Iglesia (and any unknown plan) are unlimited.
+    /// </summary>
+    public static int MaxUsers(string? planKey) => planKey?.ToLowerInvariant() switch
+    {
+        Basic => 1,
+        Standard => 3,
+        Pro => 5,
+        _ => int.MaxValue
+    };
 }
 
 public static class CfsAiQuotas
