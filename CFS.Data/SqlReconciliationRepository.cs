@@ -86,10 +86,136 @@ public sealed class SqlReconciliationRepository(SqlConnectionFactory connectionF
                 reconciliationId = Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken));
             }
 
-            await MarkDepositsAsync(connection, transaction, entry.DepositIds, entry.AccountId, entry.StatementDate, _tenantId, cancellationToken);
-            await MarkTransactionsAsync(connection, transaction, entry.TransactionIds, entry.AccountId, entry.StatementDate, _tenantId, cancellationToken);
+            await MarkDepositsAsync(connection, transaction, entry.DepositIds, entry.AccountId, entry.StatementDate, _tenantId, reconciliationId, cancellationToken);
+            await MarkTransactionsAsync(connection, transaction, entry.TransactionIds, entry.AccountId, entry.StatementDate, _tenantId, reconciliationId, cancellationToken);
 
             await transaction.CommitAsync(cancellationToken);
+            return new ReconciliationSaveResult(true, reconciliationId, null);
+        }
+        catch (Exception ex)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return new ReconciliationSaveResult(false, null, ex.Message);
+        }
+    }
+
+    public async Task<ReconciliationSaveResult> VoidAsync(
+        int reconciliationId,
+        string userName,
+        CancellationToken cancellationToken = default)
+    {
+        if (reconciliationId <= 0)
+        {
+            return new ReconciliationSaveResult(false, null, "ID de conciliacion invalido.");
+        }
+
+        await using var connection = connectionFactory.Create();
+        await connection.OpenAsync(cancellationToken);
+        await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync(cancellationToken);
+
+        try
+        {
+            int accountId;
+            DateTime statementDate;
+
+            const string getSql = """
+                SELECT ID_Cuenta_FK, FechaConciliacion
+                FROM dbo.Conciliaciones
+                WHERE ID_Conciliacion = @id AND ID_Tenant_FK = @tenantId;
+                """;
+            await using (var command = new SqlCommand(getSql, connection, transaction))
+            {
+                command.Parameters.Add("@id", SqlDbType.Int).Value = reconciliationId;
+                command.Parameters.AddWithValue("@tenantId", _tenantId);
+                await using var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleRow, cancellationToken);
+                if (!await reader.ReadAsync(cancellationToken))
+                {
+                    await transaction.RollbackAsync(cancellationToken);
+                    return new ReconciliationSaveResult(false, null, "No se encontro la conciliacion.");
+                }
+
+                accountId = reader.GetInt32(reader.GetOrdinal("ID_Cuenta_FK"));
+                statementDate = reader.GetDateTime(reader.GetOrdinal("FechaConciliacion"));
+            }
+
+            // 1) Un-clear items recorded as members of this reconciliation (precise path).
+            var fkAffected = 0;
+            await using (var command = new SqlCommand(
+                "UPDATE dbo.Depositos SET Conciliado = 0, ID_Conciliacion_FK = NULL WHERE ID_Conciliacion_FK = @id AND ID_Tenant_FK = @tenantId;",
+                connection, transaction))
+            {
+                command.Parameters.Add("@id", SqlDbType.Int).Value = reconciliationId;
+                command.Parameters.AddWithValue("@tenantId", _tenantId);
+                fkAffected += await command.ExecuteNonQueryAsync(cancellationToken);
+            }
+            await using (var command = new SqlCommand(
+                "UPDATE dbo.Transacciones SET Conciliada = 0, ID_Conciliacion_FK = NULL WHERE ID_Conciliacion_FK = @id AND ID_Tenant_FK = @tenantId;",
+                connection, transaction))
+            {
+                command.Parameters.Add("@id", SqlDbType.Int).Value = reconciliationId;
+                command.Parameters.AddWithValue("@tenantId", _tenantId);
+                fkAffected += await command.ExecuteNonQueryAsync(cancellationToken);
+            }
+
+            // 2) Legacy fallback: reconciliations closed before membership tracking have no FK on
+            //    their items. Only when this reconciliation has no recorded members, un-clear items
+            //    in its statement-date window (after the previous reconciliation, up to this date).
+            if (fkAffected == 0)
+            {
+                DateTime? previousDate = null;
+                const string prevSql = """
+                    SELECT MAX(FechaConciliacion)
+                    FROM dbo.Conciliaciones
+                    WHERE ID_Cuenta_FK = @accountId AND ID_Tenant_FK = @tenantId
+                      AND FechaConciliacion < @date AND ID_Conciliacion <> @id;
+                    """;
+                await using (var command = new SqlCommand(prevSql, connection, transaction))
+                {
+                    command.Parameters.Add("@accountId", SqlDbType.Int).Value = accountId;
+                    command.Parameters.Add("@date", SqlDbType.Date).Value = statementDate.Date;
+                    command.Parameters.Add("@id", SqlDbType.Int).Value = reconciliationId;
+                    command.Parameters.AddWithValue("@tenantId", _tenantId);
+                    if (await command.ExecuteScalarAsync(cancellationToken) is DateTime dt)
+                    {
+                        previousDate = dt;
+                    }
+                }
+
+                const string legacyDeposits = """
+                    UPDATE dbo.Depositos SET Conciliado = 0
+                    WHERE ID_Cuenta_FK = @accountId AND ID_Tenant_FK = @tenantId
+                      AND ID_Conciliacion_FK IS NULL AND ISNULL(Conciliado, 0) = 1
+                      AND FechaDeposito <= @date AND (@prevDate IS NULL OR FechaDeposito > @prevDate);
+                    """;
+                const string legacyTransactions = """
+                    UPDATE dbo.Transacciones SET Conciliada = 0
+                    WHERE ID_Cuenta_FK = @accountId AND ID_Tenant_FK = @tenantId
+                      AND ID_Conciliacion_FK IS NULL AND ISNULL(Conciliada, 0) = 1
+                      AND Fecha <= @date AND (@prevDate IS NULL OR Fecha > @prevDate);
+                    """;
+                foreach (var legacySql in new[] { legacyDeposits, legacyTransactions })
+                {
+                    await using var command = new SqlCommand(legacySql, connection, transaction);
+                    command.Parameters.Add("@accountId", SqlDbType.Int).Value = accountId;
+                    command.Parameters.Add("@date", SqlDbType.Date).Value = statementDate.Date;
+                    command.Parameters.Add("@prevDate", SqlDbType.Date).Value = (object?)previousDate ?? DBNull.Value;
+                    command.Parameters.AddWithValue("@tenantId", _tenantId);
+                    await command.ExecuteNonQueryAsync(cancellationToken);
+                }
+            }
+
+            // 3) Delete the reconciliation record.
+            await using (var command = new SqlCommand(
+                "DELETE FROM dbo.Conciliaciones WHERE ID_Conciliacion = @id AND ID_Tenant_FK = @tenantId;",
+                connection, transaction))
+            {
+                command.Parameters.Add("@id", SqlDbType.Int).Value = reconciliationId;
+                command.Parameters.AddWithValue("@tenantId", _tenantId);
+                await command.ExecuteNonQueryAsync(cancellationToken);
+            }
+
+            await transaction.CommitAsync(cancellationToken);
+            await AuditLogger.TryLogAsync(connectionFactory, _tenantId, userName, "ANULAR", "Conciliacion", reconciliationId.ToString(), "Conciliacion anulada.", cancellationToken);
             return new ReconciliationSaveResult(true, reconciliationId, null);
         }
         catch (Exception ex)
@@ -419,6 +545,7 @@ public sealed class SqlReconciliationRepository(SqlConnectionFactory connectionF
         int accountId,
         DateTime statementDate,
         int tenantId,
+        int reconciliationId,
         CancellationToken cancellationToken)
     {
         if (ids.Count == 0)
@@ -429,7 +556,8 @@ public sealed class SqlReconciliationRepository(SqlConnectionFactory connectionF
         var parameterNames = ids.Select((_, index) => $"@deposit{index}").ToList();
         var sql = $"""
             UPDATE dbo.Depositos
-            SET Conciliado = 1
+            SET Conciliado = 1,
+                ID_Conciliacion_FK = @reconciliationId
             WHERE ID_Deposito IN ({string.Join(", ", parameterNames)})
               AND ID_Cuenta_FK = @accountId
               AND ID_Tenant_FK = @tenantId
@@ -441,6 +569,7 @@ public sealed class SqlReconciliationRepository(SqlConnectionFactory connectionF
         command.Parameters.Add("@accountId", SqlDbType.Int).Value = accountId;
         command.Parameters.Add("@statementDate", SqlDbType.Date).Value = statementDate.Date;
         command.Parameters.AddWithValue("@tenantId", tenantId);
+        command.Parameters.Add("@reconciliationId", SqlDbType.Int).Value = reconciliationId;
         AddIdParameters(command, parameterNames, ids);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -452,6 +581,7 @@ public sealed class SqlReconciliationRepository(SqlConnectionFactory connectionF
         int accountId,
         DateTime statementDate,
         int tenantId,
+        int reconciliationId,
         CancellationToken cancellationToken)
     {
         if (ids.Count == 0)
@@ -462,7 +592,8 @@ public sealed class SqlReconciliationRepository(SqlConnectionFactory connectionF
         var parameterNames = ids.Select((_, index) => $"@transaction{index}").ToList();
         var sql = $"""
             UPDATE T
-            SET Conciliada = 1
+            SET Conciliada = 1,
+                ID_Conciliacion_FK = @reconciliationId
             FROM dbo.Transacciones T
             INNER JOIN dbo.Subcategorias S ON S.ID_Subcategoria = T.ID_Subcategoria_FK
             INNER JOIN dbo.Categorias C ON C.ID_Categoria = S.ID_Categoria_FK
@@ -485,6 +616,7 @@ public sealed class SqlReconciliationRepository(SqlConnectionFactory connectionF
         command.Parameters.Add("@accountId", SqlDbType.Int).Value = accountId;
         command.Parameters.Add("@statementDate", SqlDbType.Date).Value = statementDate.Date;
         command.Parameters.AddWithValue("@tenantId", tenantId);
+        command.Parameters.Add("@reconciliationId", SqlDbType.Int).Value = reconciliationId;
         AddIdParameters(command, parameterNames, ids);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
