@@ -441,6 +441,33 @@ public sealed class DemoDepositRepository : IDepositRepository
         return Task.FromResult(new DepositBatchSaveResult(true, ids, null));
     }
 
+    public Task<DepositSaveResult> UpdateDateAsync(
+        int id,
+        DateTime newDate,
+        string userName,
+        CancellationToken cancellationToken = default)
+    {
+        var existing = DemoData.Deposits.FirstOrDefault(d => d.Id == id);
+        if (existing is null)
+        {
+            return Task.FromResult(new DepositSaveResult(false, null, "No se encontro el deposito demo."));
+        }
+
+        if (existing.Status == "Anulado")
+        {
+            return Task.FromResult(new DepositSaveResult(false, null, "No se puede cambiar la fecha de un deposito anulado."));
+        }
+
+        if (existing.Status == "Conciliado")
+        {
+            return Task.FromResult(new DepositSaveResult(false, null, "No se puede cambiar la fecha de un deposito conciliado. Anula primero la conciliacion."));
+        }
+
+        DemoData.Deposits.Remove(existing);
+        DemoData.Deposits.Insert(0, existing with { DepositDate = newDate.Date });
+        return Task.FromResult(new DepositSaveResult(true, id, null));
+    }
+
     public Task<DepositSaveResult> VoidAsync(
         int id,
         string reason,

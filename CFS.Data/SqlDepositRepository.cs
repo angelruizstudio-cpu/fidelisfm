@@ -200,6 +200,90 @@ public sealed class SqlDepositRepository(SqlConnectionFactory connectionFactory,
         }
     }
 
+    public async Task<DepositSaveResult> UpdateDateAsync(
+        int id,
+        DateTime newDate,
+        string userName,
+        CancellationToken cancellationToken = default)
+    {
+        if (id <= 0)
+        {
+            return new DepositSaveResult(false, null, "ID de deposito invalido.");
+        }
+
+        await using var connection = connectionFactory.Create();
+        await connection.OpenAsync(cancellationToken);
+        await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync(cancellationToken);
+
+        try
+        {
+            const string getSql = """
+                SELECT ISNULL(Conciliado, 0) AS Conciliado, ISNULL(Anulado, 0) AS Anulado
+                FROM dbo.Depositos
+                WHERE ID_Deposito = @id AND ID_Tenant_FK = @tenantId;
+                """;
+
+            bool reconciled, voided;
+            await using (var command = new SqlCommand(getSql, connection, transaction))
+            {
+                command.Parameters.Add("@id", SqlDbType.Int).Value = id;
+                command.Parameters.AddWithValue("@tenantId", _tenantId);
+                await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+                if (!await reader.ReadAsync(cancellationToken))
+                {
+                    await transaction.RollbackAsync(cancellationToken);
+                    return new DepositSaveResult(false, null, "No se encontro el deposito.");
+                }
+
+                reconciled = reader.GetBoolean(reader.GetOrdinal("Conciliado"));
+                voided = reader.GetBoolean(reader.GetOrdinal("Anulado"));
+            }
+
+            if (voided)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return new DepositSaveResult(false, null, "No se puede cambiar la fecha de un deposito anulado.");
+            }
+
+            if (reconciled)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return new DepositSaveResult(false, null, "No se puede cambiar la fecha de un deposito conciliado. Anula primero la conciliacion.");
+            }
+
+            const string updateSql = """
+                UPDATE dbo.Depositos
+                SET FechaDeposito = @date
+                WHERE ID_Deposito = @id
+                  AND ID_Tenant_FK = @tenantId
+                  AND ISNULL(Anulado, 0) = 0
+                  AND ISNULL(Conciliado, 0) = 0;
+                """;
+
+            await using (var command = new SqlCommand(updateSql, connection, transaction))
+            {
+                command.Parameters.Add("@id", SqlDbType.Int).Value = id;
+                command.Parameters.Add("@date", SqlDbType.Date).Value = newDate.Date;
+                command.Parameters.AddWithValue("@tenantId", _tenantId);
+                var affected = await command.ExecuteNonQueryAsync(cancellationToken);
+                if (affected == 0)
+                {
+                    await transaction.RollbackAsync(cancellationToken);
+                    return new DepositSaveResult(false, null, "No se pudo actualizar la fecha del deposito.");
+                }
+            }
+
+            await transaction.CommitAsync(cancellationToken);
+            await AuditLogger.TryLogAsync(connectionFactory, _tenantId, userName, "EDITAR", "Deposito", id.ToString(), $"Fecha de deposito actualizada a {newDate:yyyy-MM-dd}.", cancellationToken);
+            return new DepositSaveResult(true, id, null);
+        }
+        catch (Exception ex)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return new DepositSaveResult(false, null, ex.Message);
+        }
+    }
+
     public async Task<DepositSaveResult> VoidAsync(
         int id,
         string reason,

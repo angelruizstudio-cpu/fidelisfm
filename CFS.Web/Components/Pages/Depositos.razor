@@ -143,6 +143,7 @@ else
                             <span class="@StatusBadgeClass(deposit.Status)">@deposit.Status</span>
                             @if (deposit.Status == "Registrado")
                             {
+                                <button class="btn btn-outline-secondary btn-sm" type="button" @onclick="() => AskEditDate(deposit)">Editar fecha</button>
                                 <button class="btn btn-outline-danger btn-sm" type="button" @onclick="() => AskVoid(deposit)">Anular</button>
                             }
                         </div>
@@ -169,6 +170,22 @@ else
     </div>
 }
 
+@if (showDateDialog && depositToEditDate is not null)
+{
+    <div class="modal-backdrop-lite">
+        <div class="void-dialog">
+            <h2>Editar fecha del depósito #@depositToEditDate.Id</h2>
+            <p>Cambia la fecha de este depósito. Solo se permite mientras no esté conciliado ni anulado.</p>
+            <label>Fecha del depósito</label>
+            <InputDate class="form-control" @bind-Value="newDepositDate" />
+            <div class="form-actions">
+                <button class="btn btn-outline-secondary" @onclick="CancelEditDate" disabled="@isSavingDate">Cancelar</button>
+                <button class="btn btn-primary" @onclick="SaveDepositDateAsync" disabled="@isSavingDate">@(isSavingDate ? "Guardando..." : "Guardar fecha")</button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private DepositLookups lookups = new([]);
     private IReadOnlyList<DepositCandidate> pendingCandidates = [];
@@ -179,6 +196,10 @@ else
     private string statusCss = "alert-info";
     private string voidReason = string.Empty;
     private DepositSummary? depositToVoid;
+    private DepositSummary? depositToEditDate;
+    private DateTime newDepositDate = DateTime.Today;
+    private bool showDateDialog;
+    private bool isSavingDate;
     private bool isLoading = true;
     private bool isSaving;
     private bool showVoidDialog;
@@ -319,6 +340,47 @@ else
 
         SetStatus("Depósito anulado correctamente.", "alert-success");
         await LoadAsync();
+    }
+
+    private void AskEditDate(DepositSummary deposit)
+    {
+        depositToEditDate = deposit;
+        newDepositDate = deposit.DepositDate;
+        showDateDialog = true;
+    }
+
+    private void CancelEditDate()
+    {
+        depositToEditDate = null;
+        showDateDialog = false;
+    }
+
+    private async Task SaveDepositDateAsync()
+    {
+        if (depositToEditDate is null)
+        {
+            return;
+        }
+
+        isSavingDate = true;
+        try
+        {
+            var result = await DepositRepository.UpdateDateAsync(depositToEditDate.Id, newDepositDate, await GetCurrentUserNameAsync());
+            if (!result.Saved)
+            {
+                SetStatus(result.ErrorMessage ?? "No se pudo actualizar la fecha del depósito.", "alert-danger");
+                return;
+            }
+
+            SetStatus("Fecha del depósito actualizada correctamente.", "alert-success");
+            showDateDialog = false;
+            depositToEditDate = null;
+            await LoadAsync();
+        }
+        finally
+        {
+            isSavingDate = false;
+        }
     }
 
     private async Task<string> GetCurrentUserNameAsync()

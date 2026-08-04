@@ -25,4 +25,15 @@ public interface IDepositRepository
         string reason,
         string userName,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Updates the date of an existing deposit. Only allowed while the deposit is still editable
+    /// (not voided and not part of a finalized reconciliation), so a date change can never corrupt
+    /// a closed reconciliation.
+    /// </summary>
+    Task<DepositSaveResult> UpdateDateAsync(
+        int id,
+        DateTime newDate,
+        string userName,
+        CancellationToken cancellationToken = default);
 }
