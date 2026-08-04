@@ -554,6 +554,21 @@ public sealed class DemoReconciliationRepository : IReconciliationRepository
 
         return Task.FromResult(new ReconciliationSaveResult(true, id, null));
     }
+
+    public Task<ReconciliationSaveResult> VoidAsync(
+        int reconciliationId,
+        string userName,
+        CancellationToken cancellationToken = default)
+    {
+        var existing = DemoData.Reconciliations.FirstOrDefault(r => r.Id == reconciliationId);
+        if (existing is null)
+        {
+            return Task.FromResult(new ReconciliationSaveResult(false, null, "No se encontro la conciliacion demo."));
+        }
+
+        DemoData.Reconciliations.Remove(existing);
+        return Task.FromResult(new ReconciliationSaveResult(true, reconciliationId, null));
+    }
 }
 
 public sealed class DemoReportRepository : IReportRepository
