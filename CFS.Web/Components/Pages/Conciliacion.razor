@@ -123,7 +123,15 @@ else
 
                 <div class="reconcile-section-title">
                     <h3>Pagos pendientes</h3>
-                    <span>@PendingPayments.Count</span>
+                    <div class="reconcile-title-actions">
+                        @if (PendingPayments.Count > 0)
+                        {
+                            <button type="button" class="reconcile-select-all" @onclick="() => ToggleAllTransactions(PendingPayments)">
+                                @(AllSelected(PendingPayments) ? "Quitar todos" : "Seleccionar todos")
+                            </button>
+                        }
+                        <span>@PendingPayments.Count</span>
+                    </div>
                 </div>
                 @foreach (var item in PendingPayments)
                 {
@@ -139,7 +147,15 @@ else
 
                 <div class="reconcile-section-title">
                     <h3>Depósitos directos pendientes</h3>
-                    <span>@PendingDirectDeposits.Count</span>
+                    <div class="reconcile-title-actions">
+                        @if (PendingDirectDeposits.Count > 0)
+                        {
+                            <button type="button" class="reconcile-select-all" @onclick="() => ToggleAllTransactions(PendingDirectDeposits)">
+                                @(AllSelected(PendingDirectDeposits) ? "Quitar todos" : "Seleccionar todos")
+                            </button>
+                        }
+                        <span>@PendingDirectDeposits.Count</span>
+                    </div>
                 </div>
                 @foreach (var item in PendingDirectDeposits)
                 {
@@ -339,6 +355,30 @@ else
     private void ToggleTransaction(int id, ChangeEventArgs args)
     {
         Toggle(selectedTransactions, id, args);
+        entry.TransactionIds = selectedTransactions.ToList();
+    }
+
+    private bool AllSelected(IReadOnlyList<ReconciliationCandidate> items) =>
+        items.Count > 0 && items.All(i => selectedTransactions.Contains(i.Id));
+
+    private void ToggleAllTransactions(IReadOnlyList<ReconciliationCandidate> items)
+    {
+        var ids = items.Select(i => i.Id).ToList();
+        if (ids.All(selectedTransactions.Contains))
+        {
+            foreach (var id in ids)
+            {
+                selectedTransactions.Remove(id);
+            }
+        }
+        else
+        {
+            foreach (var id in ids)
+            {
+                selectedTransactions.Add(id);
+            }
+        }
+
         entry.TransactionIds = selectedTransactions.ToList();
     }
 

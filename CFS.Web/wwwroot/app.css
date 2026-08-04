@@ -2208,6 +2208,26 @@ h1:focus {
     font-weight: 800;
 }
 
+.reconcile-title-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.reconcile-select-all {
+    background: none;
+    border: none;
+    padding: 0;
+    color: #b8821a;
+    font-weight: 700;
+    font-size: .82rem;
+    cursor: pointer;
+}
+
+.reconcile-select-all:hover {
+    text-decoration: underline;
+}
+
 .reconcile-row {
     align-items: center;
     border-bottom: 1px solid #edf1f5;
