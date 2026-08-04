@@ -4,6 +4,7 @@
 @using Microsoft.AspNetCore.Authorization
 @using System.Security.Claims
 @inject IUserManagementRepository UserManagement
+@inject ISubscriptionService SubscriptionService
 @inject IEmailService EmailService
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject NavigationManager Nav
@@ -250,6 +251,17 @@ else
 
         try
         {
+            // Enforce the per-plan user limit (Básico 1, Standard 3, Pro 5; Founder unlimited).
+            var limitAuthState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var subscription = await SubscriptionService.GetCurrentAsync(limitAuthState.User);
+            var maxUsers = CfsPlans.MaxUsers(subscription.PlanKey);
+            var currentCount = await UserManagement.GetUserCountAsync();
+            if (currentCount >= maxUsers)
+            {
+                errorMessage = $"Tu plan {subscription.PlanName} permite hasta {maxUsers} usuario(s). Actualiza tu plan para agregar más.";
+                return;
+            }
+
             var result = await UserManagement.CreateUserAsync(newUser);
 
             if (!result.Saved)
