@@ -8,9 +8,6 @@ namespace CFS.Data;
 
 public sealed class SqlUserManagementRepository(SqlConnectionFactory connectionFactory, ITenantContext tenantContext) : IUserManagementRepository
 {
-    private const int Iterations = 100000;
-    private const int SaltSize = 16;
-    private const int HashSize = 32;
     private const int TokenExpiryHours = 48;
     private const int MinPasswordLength = 8;
 
@@ -104,19 +101,18 @@ public sealed class SqlUserManagementRepository(SqlConnectionFactory connectionF
             return new UserSaveResult(false, null, null, $"El rol '{entry.Role}' no existe en el sistema.");
         }
 
-        var salt = RandomNumberGenerator.GetBytes(SaltSize);
         var tempPassword = GenerateTempPassword();
-        var hash = Rfc2898DeriveBytes.Pbkdf2(tempPassword, salt, Iterations, HashAlgorithmName.SHA256, HashSize);
+        var (salt, hash, iterations) = PasswordHasher.Hash(tempPassword);
 
         await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync(cancellationToken);
         try
         {
             const string insertSql = """
                 INSERT INTO dbo.Usuarios
-                    (Nombre, Apellido, NombreUsuario, Email, ContrasenaSalt, ContrasenaHash,
+                    (Nombre, Apellido, NombreUsuario, Email, ContrasenaSalt, ContrasenaHash, ContrasenaIteraciones,
                      ID_Tenant_FK, IsActive, MustChangePassword)
                 VALUES
-                    (@nombre, @apellido, @userName, @email, @salt, @hash,
+                    (@nombre, @apellido, @userName, @email, @salt, @hash, @iterations,
                      @tenantId, 1, 1);
                 SELECT CAST(SCOPE_IDENTITY() AS INT);
                 """;
@@ -128,8 +124,9 @@ public sealed class SqlUserManagementRepository(SqlConnectionFactory connectionF
                 insert.Parameters.Add("@apellido", SqlDbType.VarChar, 100).Value = entry.LastName.Trim();
                 insert.Parameters.Add("@userName", SqlDbType.VarChar, 100).Value = entry.UserName.Trim();
                 insert.Parameters.Add("@email", SqlDbType.NVarChar, 256).Value = (object?)entry.Email.Trim() ?? DBNull.Value;
-                insert.Parameters.Add("@salt", SqlDbType.VarBinary, SaltSize).Value = salt;
-                insert.Parameters.Add("@hash", SqlDbType.VarBinary, HashSize).Value = hash;
+                insert.Parameters.Add("@salt", SqlDbType.VarBinary, salt.Length).Value = salt;
+                insert.Parameters.Add("@hash", SqlDbType.VarBinary, hash.Length).Value = hash;
+                insert.Parameters.Add("@iterations", SqlDbType.Int).Value = iterations;
                 insert.Parameters.Add("@tenantId", SqlDbType.Int).Value = _tenantId;
                 userId = Convert.ToInt32(await insert.ExecuteScalarAsync(cancellationToken));
             }
@@ -266,22 +263,22 @@ public sealed class SqlUserManagementRepository(SqlConnectionFactory connectionF
 
         try
         {
-            var salt = RandomNumberGenerator.GetBytes(SaltSize);
-            var hash = Rfc2898DeriveBytes.Pbkdf2(newPassword, salt, Iterations, HashAlgorithmName.SHA256, HashSize);
+            var (salt, hash, iterations) = PasswordHasher.Hash(newPassword);
 
             // IsActive = 1 in the WHERE (not the SET): a deactivated user must not be able
             // to re-enable their own account with a leftover reset link.
             const string updateUser = """
                 UPDATE dbo.Usuarios
-                   SET ContrasenaSalt = @salt, ContrasenaHash = @hash,
+                   SET ContrasenaSalt = @salt, ContrasenaHash = @hash, ContrasenaIteraciones = @iterations,
                        MustChangePassword = 0
                  WHERE ID_Usuario = @userId AND IsActive = 1;
                 """;
 
             await using (var cmd = new SqlCommand(updateUser, connection, transaction))
             {
-                cmd.Parameters.Add("@salt", SqlDbType.VarBinary, SaltSize).Value = salt;
-                cmd.Parameters.Add("@hash", SqlDbType.VarBinary, HashSize).Value = hash;
+                cmd.Parameters.Add("@salt", SqlDbType.VarBinary, salt.Length).Value = salt;
+                cmd.Parameters.Add("@hash", SqlDbType.VarBinary, hash.Length).Value = hash;
+                cmd.Parameters.Add("@iterations", SqlDbType.Int).Value = iterations;
                 cmd.Parameters.Add("@userId", SqlDbType.Int).Value = info.UserId;
                 if (await cmd.ExecuteNonQueryAsync(cancellationToken) == 0)
                 {
@@ -314,18 +311,18 @@ public sealed class SqlUserManagementRepository(SqlConnectionFactory connectionF
         await using var connection = connectionFactory.Create();
         await connection.OpenAsync(cancellationToken);
 
-        var salt = RandomNumberGenerator.GetBytes(SaltSize);
-        var hash = Rfc2898DeriveBytes.Pbkdf2(newPassword, salt, Iterations, HashAlgorithmName.SHA256, HashSize);
+        var (salt, hash, iterations) = PasswordHasher.Hash(newPassword);
 
         const string sql = """
             UPDATE dbo.Usuarios
-               SET ContrasenaSalt = @salt, ContrasenaHash = @hash, MustChangePassword = 0
+               SET ContrasenaSalt = @salt, ContrasenaHash = @hash, ContrasenaIteraciones = @iterations, MustChangePassword = 0
              WHERE ID_Usuario = @userId AND ID_Tenant_FK = @tenantId;
             """;
 
         await using var command = new SqlCommand(sql, connection);
-        command.Parameters.Add("@salt", SqlDbType.VarBinary, SaltSize).Value = salt;
-        command.Parameters.Add("@hash", SqlDbType.VarBinary, HashSize).Value = hash;
+        command.Parameters.Add("@salt", SqlDbType.VarBinary, salt.Length).Value = salt;
+        command.Parameters.Add("@hash", SqlDbType.VarBinary, hash.Length).Value = hash;
+        command.Parameters.Add("@iterations", SqlDbType.Int).Value = iterations;
         command.Parameters.Add("@userId", SqlDbType.Int).Value = userId;
         command.Parameters.Add("@tenantId", SqlDbType.Int).Value = _tenantId;
         return await command.ExecuteNonQueryAsync(cancellationToken) > 0;
