@@ -1,5 +1,4 @@
 using System.Data;
-using System.Security.Cryptography;
 using CFS.Core.Models;
 using CFS.Core.Services;
 using Microsoft.Data.SqlClient;
@@ -8,8 +7,6 @@ namespace CFS.Data;
 
 public sealed class SqlUserAuthenticationRepository(SqlConnectionFactory connectionFactory) : IUserAuthenticationRepository
 {
-    private const int Iterations = 100000;
-
     public async Task<AuthenticatedUser?> ValidateCredentialsAsync(
         string userName,
         string password,
@@ -29,17 +26,24 @@ public sealed class SqlUserAuthenticationRepository(SqlConnectionFactory connect
         var hasMustChange = await HasColumnAsync(connection, "MustChangePassword", cancellationToken);
         var hasEmail = await HasColumnAsync(connection, "Email", cancellationToken);
         var hasIsActive = await HasColumnAsync(connection, "IsActive", cancellationToken);
+        var hasIterations = await HasColumnAsync(connection, "ContrasenaIteraciones", cancellationToken);
 
         if (!hasCurrentColumns && !hasLegacyColumns)
         {
             return null;
         }
 
+        // Before the iterations column exists, every stored hash was created at the legacy count.
+        var iterationsColumn = hasIterations
+            ? "ContrasenaIteraciones"
+            : $"CAST({PasswordHasher.LegacyIterations} AS INT) AS ContrasenaIteraciones";
+
         var passwordColumns = $"""
             {(hasCurrentColumns ? "ContrasenaSalt" : "CAST(NULL AS VARBINARY(MAX)) AS ContrasenaSalt")},
             {(hasCurrentColumns ? "ContrasenaHash" : "CAST(NULL AS VARBINARY(MAX)) AS ContrasenaHash")},
             {(hasLegacyColumns ? "Salt" : "CAST(NULL AS VARBINARY(MAX)) AS Salt")},
             {(hasLegacyColumns ? "Hash" : "CAST(NULL AS VARBINARY(MAX)) AS Hash")},
+            {iterationsColumn},
             {(hasTenantColumn ? "ID_Tenant_FK" : "CAST(1 AS INT) AS ID_Tenant_FK")},
             {(hasMustChange ? "MustChangePassword" : "CAST(0 AS BIT) AS MustChangePassword")},
             {(hasEmail ? "Email" : "CAST(NULL AS NVARCHAR(256)) AS Email")},
@@ -67,6 +71,7 @@ public sealed class SqlUserAuthenticationRepository(SqlConnectionFactory connect
         bool mustChangePassword;
         string? email;
         bool isActive;
+        int iterations;
 
         await using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleRow, cancellationToken))
         {
@@ -93,11 +98,21 @@ public sealed class SqlUserAuthenticationRepository(SqlConnectionFactory connect
             mustChangePassword = reader.GetBoolean(reader.GetOrdinal("MustChangePassword"));
             email = reader["Email"] as string;
             isActive = reader.GetBoolean(reader.GetOrdinal("IsActive"));
+            iterations = reader["ContrasenaIteraciones"] is DBNull
+                ? PasswordHasher.LegacyIterations
+                : reader.GetInt32(reader.GetOrdinal("ContrasenaIteraciones"));
         }
 
-        if (!isActive || !VerifyPassword(password, salt, expectedHash))
+        if (!isActive || !PasswordHasher.Verify(password, salt, expectedHash, iterations))
         {
             return null;
+        }
+
+        // Login succeeded: opportunistically upgrade an old hash to the current cost using the
+        // plaintext we were just given. Best-effort — a failure here must never block the login.
+        if (PasswordHasher.NeedsRehash(iterations))
+        {
+            await TryUpgradeHashAsync(connection, userId, password, cancellationToken);
         }
 
         var roles = await LoadRolesAsync(connection, userId, cancellationToken);
@@ -187,20 +202,35 @@ public sealed class SqlUserAuthenticationRepository(SqlConnectionFactory connect
         return roles;
     }
 
-    private static bool VerifyPassword(string password, byte[]? salt, byte[]? expectedHash)
+    private static async Task TryUpgradeHashAsync(
+        SqlConnection connection,
+        int userId,
+        string password,
+        CancellationToken cancellationToken)
     {
-        if (salt is not { Length: > 0 } || expectedHash is not { Length: > 0 })
+        try
         {
-            return false;
-        }
+            var (salt, hash, iterations) = PasswordHasher.Hash(password);
 
-        var calculatedHash = Rfc2898DeriveBytes.Pbkdf2(
-            password,
-            salt,
-            Iterations,
-            HashAlgorithmName.SHA256,
-            expectedHash.Length);
-        return CryptographicOperations.FixedTimeEquals(calculatedHash, expectedHash);
+            // Single statement: salt, hash and iterations are updated together atomically.
+            const string sql = """
+                UPDATE dbo.Usuarios
+                   SET ContrasenaSalt = @salt, ContrasenaHash = @hash, ContrasenaIteraciones = @iterations
+                 WHERE ID_Usuario = @userId;
+                """;
+
+            await using var command = new SqlCommand(sql, connection);
+            command.Parameters.Add("@salt", SqlDbType.VarBinary, salt.Length).Value = salt;
+            command.Parameters.Add("@hash", SqlDbType.VarBinary, hash.Length).Value = hash;
+            command.Parameters.Add("@iterations", SqlDbType.Int).Value = iterations;
+            command.Parameters.Add("@userId", SqlDbType.Int).Value = userId;
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+        catch
+        {
+            // Never block a successful login because the transparent rehash failed
+            // (e.g. the ContrasenaIteraciones column is not present yet).
+        }
     }
 
     private static byte[]? ReadBytes(SqlDataReader reader, string columnName)

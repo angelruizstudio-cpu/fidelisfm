@@ -1,5 +1,4 @@
 using System.Data;
-using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using CFS.Core.Services;
 using Microsoft.Data.SqlClient;
@@ -8,23 +7,18 @@ namespace CFS.Data;
 
 public sealed class SqlSignupRepository(SqlConnectionFactory connectionFactory) : ISignupRepository
 {
-    private const int Iterations = 100000;
-    private const int SaltSize = 16;
-    private const int HashSize = 32;
-
     public async Task CreatePendingSignupAsync(PendingSignup signup, string password, CancellationToken cancellationToken = default)
     {
-        var salt = RandomNumberGenerator.GetBytes(SaltSize);
-        var hash = Rfc2898DeriveBytes.Pbkdf2(password, salt, Iterations, HashAlgorithmName.SHA256, HashSize);
+        var (salt, hash, iterations) = PasswordHasher.Hash(password);
 
         await using var connection = connectionFactory.Create();
         await connection.OpenAsync(cancellationToken);
 
         const string sql = """
             INSERT INTO dbo.PendingSignups
-                (OrganizationName, Email, Phone, PlanKey, BillingCycle, StripeSessionId, PasswordSalt, PasswordHash)
+                (OrganizationName, Email, Phone, PlanKey, BillingCycle, StripeSessionId, PasswordSalt, PasswordHash, PasswordIteraciones)
             VALUES
-                (@organizationName, @email, @phone, @planKey, @billingCycle, @stripeSessionId, @passwordSalt, @passwordHash);
+                (@organizationName, @email, @phone, @planKey, @billingCycle, @stripeSessionId, @passwordSalt, @passwordHash, @passwordIterations);
             """;
 
         await using var command = new SqlCommand(sql, connection);
@@ -34,8 +28,9 @@ public sealed class SqlSignupRepository(SqlConnectionFactory connectionFactory) 
         command.Parameters.Add("@planKey", SqlDbType.NVarChar, 50).Value = signup.PlanKey;
         command.Parameters.Add("@billingCycle", SqlDbType.NVarChar, 20).Value = signup.BillingCycle;
         command.Parameters.Add("@stripeSessionId", SqlDbType.NVarChar, 100).Value = signup.StripeSessionId;
-        command.Parameters.Add("@passwordSalt", SqlDbType.VarBinary, SaltSize).Value = salt;
-        command.Parameters.Add("@passwordHash", SqlDbType.VarBinary, HashSize).Value = hash;
+        command.Parameters.Add("@passwordSalt", SqlDbType.VarBinary, salt.Length).Value = salt;
+        command.Parameters.Add("@passwordHash", SqlDbType.VarBinary, hash.Length).Value = hash;
+        command.Parameters.Add("@passwordIterations", SqlDbType.Int).Value = iterations;
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -74,10 +69,11 @@ public sealed class SqlSignupRepository(SqlConnectionFactory connectionFactory) 
             int pendingId;
             string organizationName, email, planKey;
             byte[]? passwordSalt, passwordHash;
+            int passwordIterations;
             int? existingTenantId;
 
             const string selectSql = """
-                SELECT ID_PendingSignup, OrganizationName, Email, PlanKey, PasswordSalt, PasswordHash, ProvisionedTenantId
+                SELECT ID_PendingSignup, OrganizationName, Email, PlanKey, PasswordSalt, PasswordHash, PasswordIteraciones, ProvisionedTenantId
                 FROM dbo.PendingSignups WITH (UPDLOCK, HOLDLOCK)
                 WHERE StripeSessionId = @sessionId;
                 """;
@@ -99,6 +95,9 @@ public sealed class SqlSignupRepository(SqlConnectionFactory connectionFactory) 
                 planKey = reader.GetString(reader.GetOrdinal("PlanKey"));
                 passwordSalt = reader["PasswordSalt"] as byte[];
                 passwordHash = reader["PasswordHash"] as byte[];
+                passwordIterations = reader["PasswordIteraciones"] is DBNull
+                    ? PasswordHasher.LegacyIterations
+                    : reader.GetInt32(reader.GetOrdinal("PasswordIteraciones"));
                 existingTenantId = reader["ProvisionedTenantId"] is DBNull ? null : reader.GetInt32(reader.GetOrdinal("ProvisionedTenantId"));
             }
 
@@ -145,16 +144,17 @@ public sealed class SqlSignupRepository(SqlConnectionFactory connectionFactory) 
 
             int userId;
             const string insertUserSql = """
-                INSERT INTO dbo.Usuarios (Nombre, Apellido, NombreUsuario, ContrasenaSalt, ContrasenaHash, ID_Tenant_FK)
-                VALUES (@nombre, '', @userName, @salt, @hash, @tenantId);
+                INSERT INTO dbo.Usuarios (Nombre, Apellido, NombreUsuario, ContrasenaSalt, ContrasenaHash, ContrasenaIteraciones, ID_Tenant_FK)
+                VALUES (@nombre, '', @userName, @salt, @hash, @iterations, @tenantId);
                 SELECT CAST(SCOPE_IDENTITY() AS INT);
                 """;
             await using (var command = new SqlCommand(insertUserSql, connection, transaction))
             {
                 command.Parameters.Add("@nombre", SqlDbType.VarChar, 100).Value = organizationName;
                 command.Parameters.Add("@userName", SqlDbType.VarChar, 100).Value = email;
-                command.Parameters.Add("@salt", SqlDbType.VarBinary, SaltSize).Value = passwordSalt;
-                command.Parameters.Add("@hash", SqlDbType.VarBinary, HashSize).Value = passwordHash;
+                command.Parameters.Add("@salt", SqlDbType.VarBinary, passwordSalt.Length).Value = passwordSalt;
+                command.Parameters.Add("@hash", SqlDbType.VarBinary, passwordHash.Length).Value = passwordHash;
+                command.Parameters.Add("@iterations", SqlDbType.Int).Value = passwordIterations;
                 command.Parameters.Add("@tenantId", SqlDbType.Int).Value = tenantId;
                 userId = Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken));
             }
